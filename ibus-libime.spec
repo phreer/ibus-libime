@@ -1,5 +1,5 @@
 Name:           ibus-libime
-Version:        0.3
+Version:        0.4
 Release:        1%{?dist}
 Summary:        An ibus front-end for libime
 
@@ -43,6 +43,9 @@ cmake --install builddir --prefix %{buildroot}%{_prefix}
 
 
 %changelog
+* Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com> 0.4-1
+- Add deps (weifeng.liu@intel.com)
+
 * Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com> 0.3-1
 - Add deps (weifeng.liu@intel.com)
 
