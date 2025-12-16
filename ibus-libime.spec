@@ -12,9 +12,12 @@ BuildRequires:  cmake
 BuildRequires:  ibus-devel
 BuildRequires:  libime-devel
 BuildRequires:  glibmm2.4-devel
+BuildRequires:  fcitx5-devel
 Requires:       ibus
 Requires:       libime
+Requires:       libime-data
 Requires:       glibmm2.4
+Requires:       fcitx5-libs
 
 %description
 ibus-libime is an ibus front-end for libime.
