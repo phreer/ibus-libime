@@ -10,7 +10,11 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  g++
 BuildRequires:  cmake
 BuildRequires:  ibus-devel
+BuildRequires:  libime-devel
+BuildRequires:  glibmm2.4-devel
 Requires:       ibus
+Requires:       libime
+Requires:       glibmm2.4
 
 %description
 ibus-libime is an ibus front-end for libime.
