@@ -1,5 +1,5 @@
 Name:           ibus-libime
-Version:        0.1
+Version:        0.2
 Release:        1%{?dist}
 Summary:        An ibus front-end for libime
 
@@ -36,5 +36,8 @@ cmake --install builddir --prefix %{buildroot}%{_prefix}
 
 
 %changelog
+* Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com> 0.2-1
+- new package built with tito
+
 * Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com>
 - 
