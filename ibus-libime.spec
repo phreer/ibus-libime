@@ -37,6 +37,8 @@ cmake --install builddir --prefix %{buildroot}%{_prefix}
 
 
 %files
+%{_datadir}/ibus/component/libime.xml
+%{_libexecdir}/ibus-engine-libime
 %license LICENSE
 %doc README.md
 
