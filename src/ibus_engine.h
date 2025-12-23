@@ -1,25 +1,26 @@
 #ifndef IBUS_ENGINE_H
 #define IBUS_ENGINE_H
 
-#include <memory>
 #include <ibus.h>
+
+#include <memory>
 
 class PinyinEngine;
 
 class IBusEngineWrapper {
 public:
-    static void init();
-    static void run();
+  static void init();
+  static void run();
 
 private:
-    static IBusBus *bus_;
-    static IBusFactory *factory_;
+  static IBusBus *bus_;
+  static IBusFactory *factory_;
 
-    // IBus callbacks
-    static GObject *create_engine(IBusFactory *factory,
-                                  const gchar *engine_name, gpointer user_data);
+  // IBus callbacks
+  static GObject *create_engine(IBusFactory *factory, const gchar *engine_name,
+                                gpointer user_data);
 
-    static void bus_disconnected_cb(IBusBus *bus, gpointer user_data);
+  static void bus_disconnected_cb(IBusBus *bus, gpointer user_data);
 };
 
 // IBusEngine GObject structure
@@ -31,14 +32,14 @@ typedef struct _IBusLibIMEEngine IBusLibIMEEngine;
 typedef struct _IBusLibIMEEngineClass IBusLibIMEEngineClass;
 
 struct _IBusLibIMEEngine {
-    IBusEngine parent;
+  IBusEngine parent;
 
-    // Private data
-    PinyinEngine *pinyin_engine;
+  // Private data
+  PinyinEngine *pinyin_engine;
 };
 
 struct _IBusLibIMEEngineClass {
-    IBusEngineClass parent;
+  IBusEngineClass parent;
 };
 
 // GObject methods
