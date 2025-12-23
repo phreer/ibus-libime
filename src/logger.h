@@ -1,15 +1,16 @@
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef IBUS_LIBIME_LOGGER_H
+#define IBUS_LIBIME_LOGGER_H
 
 #include <cstdlib>
 #include <ctime>
 #include <format>
 #include <fstream>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <glib.h>
+#include "configs.h"
 
 enum class LogLevel {
     DEBUG = 0,
@@ -32,6 +33,25 @@ public:
 
     LogLevel getLogLevel() const { return logLevel_; }
 
+    void setLogLevel(const char *loglevel = nullptr) {
+        // Priority: parameter > environment variable > config file
+        if (!loglevel) {
+            loglevel = Config::getInstance().getLogLevel();
+        }
+        if (loglevel) {
+            std::string levelStr(loglevel);
+            if (levelStr == "DEBUG") {
+                logLevel_ = LogLevel::DEBUG;
+            } else if (levelStr == "INFO") {
+                logLevel_ = LogLevel::INFO;
+            } else if (levelStr == "WARN") {
+                logLevel_ = LogLevel::WARN;
+            } else if (levelStr == "ERROR") {
+                logLevel_ = LogLevel::ERROR;
+            }
+        }
+    }
+
     const std::string &getLogPath() const { return logPath_; }
 
     void log(const std::string &level, LogLevel levelEnum, const std::string &message) {
@@ -52,21 +72,7 @@ public:
 
 private:
     Logger() : logLevel_(LogLevel::WARN) {
-        // Determine log level from environment variable
-        const char* logLevelEnv = std::getenv("IBUS_LIBIME_LOG_LEVEL");
-        if (logLevelEnv) {
-            std::string levelStr(logLevelEnv);
-            if (levelStr == "DEBUG") {
-                logLevel_ = LogLevel::DEBUG;
-            } else if (levelStr == "INFO") {
-                logLevel_ = LogLevel::INFO;
-            } else if (levelStr == "WARN") {
-                logLevel_ = LogLevel::WARN;
-            } else if (levelStr == "ERROR") {
-                logLevel_ = LogLevel::ERROR;
-            }
-        }
-
+        setLogLevel();
         // Determine log file path
         logPath_ = getLogFilePath();
         
@@ -91,16 +97,11 @@ private:
     }
 
     std::string getLogFilePath() {
-        const char* home = std::getenv("HOME");
-        if (!home) {
-            home = std::getenv("USER");
-            if (home) {
-                return std::format("/home/{}/.local/share/ibus-libime/ibus-libime.log", home);
-            }
+        const char* state_dir = g_get_user_state_dir();
+        if (!state_dir || state_dir[0] == '\0') {
             return "/tmp/ibus-libime.log";  // Fallback
         }
-        
-        return std::format("{}/.local/share/ibus-libime/ibus-libime.log", home);
+        return std::format("{}/ibus-libime/ibus-libime.log", state_dir);
     }
 
     void createDirectory(const std::string &path) {
@@ -151,4 +152,4 @@ private:
         Logger::getInstance().error(std::format(fmt __VA_OPT__(,) __VA_ARGS__)); \
     } while (0)
 
-#endif // LOGGER_H
+#endif // IBUS_LIBIME_LOGGER_H
