@@ -1,7 +1,10 @@
 #include "configs.h"
 
 #include <cstdlib>
+#include <cstring>
 #include <format>
+#include <map>
+#include <string>
 
 Config::Config()
     : keyFile_(nullptr), logLevel_(nullptr), nbest_(3), pageSize_(9),
@@ -62,10 +65,23 @@ void Config::loadConfig() {
     }
 
     // Read fuzzy flags (default: 0)
-    int fuzzyFlags =
-        g_key_file_get_integer(keyFile_, "general", "fuzzyflags", &error);
-    if (!error) {
-      fuzzyFlags_ = fuzzyFlags;
+    // Try to read as string first (comma-separated flag names)
+    char *fuzzyFlagsStr =
+        g_key_file_get_string(keyFile_, "general", "fuzzyflags", &error);
+    if (!error && fuzzyFlagsStr) {
+      fuzzyFlags_ = parseFuzzyFlagsString(fuzzyFlagsStr);
+      g_free(fuzzyFlagsStr);
+    } else {
+      // Fallback: try to read as integer
+      if (error) {
+        g_error_free(error);
+        error = nullptr;
+      }
+      int fuzzyFlags =
+          g_key_file_get_integer(keyFile_, "general", "fuzzyflags", &error);
+      if (!error) {
+        fuzzyFlags_ = fuzzyFlags;
+      }
     }
     if (error) {
       g_error_free(error);
@@ -93,3 +109,60 @@ int Config::getNBest() const { return nbest_; }
 int Config::getPageSize() const { return pageSize_; }
 
 int Config::getFuzzyFlags() const { return fuzzyFlags_; }
+
+int Config::parseFuzzyFlagsString(const char *flagsStr) {
+  if (!flagsStr || flagsStr[0] == '\0') {
+    return 0;
+  }
+
+  // Map of flag names to their bit positions
+  static const std::map<std::string, int> flagMap = {
+      {"CommonTypo", 1 << 0},    {"V_U", 1 << 1},
+      {"AN_ANG", 1 << 2},        {"EN_ENG", 1 << 3},
+      {"IAN_IANG", 1 << 4},      {"IN_ING", 1 << 5},
+      {"U_OU", 1 << 6},          {"UAN_UANG", 1 << 7},
+      {"C_CH", 1 << 8},          {"F_H", 1 << 9},
+      {"L_N", 1 << 10},          {"S_SH", 1 << 11},
+      {"Z_ZH", 1 << 12},         {"VE_UE", 1 << 13},
+      {"Inner", 1 << 14},        {"InnerShort", 1 << 15},
+      {"PartialFinal", 1 << 16}, {"PartialSp", 1 << 17},
+      {"AdvancedTypo", 1 << 18}, {"Correction", 1 << 19},
+      {"L_R", 1 << 20}};
+
+  int result = 0;
+  std::string str(flagsStr);
+
+  // Split by comma and parse each flag
+  size_t start = 0;
+  size_t end = 0;
+
+  while ((end = str.find(',', start)) != std::string::npos) {
+    std::string token = str.substr(start, end - start);
+    // Trim whitespace
+    size_t first = token.find_first_not_of(" \t");
+    size_t last = token.find_last_not_of(" \t");
+    if (first != std::string::npos) {
+      token = token.substr(first, last - first + 1);
+      auto it = flagMap.find(token);
+      if (it != flagMap.end()) {
+        result |= it->second;
+      }
+    }
+    start = end + 1;
+  }
+
+  // Process the last token
+  std::string token = str.substr(start);
+  size_t first = token.find_first_not_of(" \t");
+  size_t last = token.find_last_not_of(" \t");
+  if (first != std::string::npos) {
+    token = token.substr(first, last - first + 1);
+    auto it = flagMap.find(token);
+    if (it != flagMap.end()) {
+      result |= it->second;
+    }
+  }
+
+  return result;
+}
+

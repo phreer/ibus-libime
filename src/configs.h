@@ -34,6 +34,7 @@ private:
 
   void loadConfig();
   std::string getConfigFilePath();
+  int parseFuzzyFlagsString(const char *flagsStr);
 
   std::string configPath_;
   GKeyFile *keyFile_;
