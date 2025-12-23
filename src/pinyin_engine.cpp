@@ -343,7 +343,8 @@ void PinyinEngine::selectCandidate(size_t index) {
       LOG_DEBUG("Learning completed");
       reset();
     } else {
-      LOG_DEBUG("Partial selection, updating UI");
+      LOG_DEBUG("Partial selection, resetting page and updating UI");
+      current_page_ = 0;
       updateUI();
     }
   } else {
