@@ -143,9 +143,9 @@ bool PinyinEngine::processKeyEvent(guint keyval, guint keycode,
         return FALSE;
     }
 
-    // Pass through if has Ctrl or Alt modifier
-    if (modifiers & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK)) {
-        LOG_DEBUG("Passing through: has Ctrl/Alt modifier");
+    // Pass through if has Ctrl, Alt or Super (Win) modifier
+    if (modifiers & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK | IBUS_SUPER_MASK)) {
+        LOG_DEBUG("Passing through: has Ctrl/Alt/Super modifier");
         return FALSE;
     }
 
