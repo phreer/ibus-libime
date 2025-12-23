@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
-project(ibus-libime VERSION 0.1.0)
+
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" PROJECT_VERSION)
+string(STRIP "${PROJECT_VERSION}" PROJECT_VERSION)
+project(ibus-libime VERSION ${PROJECT_VERSION})
 
 include(GNUInstallDirs)
 
