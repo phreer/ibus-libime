@@ -74,10 +74,29 @@ ibus restart
 
 ### 引擎配置
 
-当前配置（可在 `src/pinyin_engine.cpp` 中修改）：
-- NBest: 3（候选词数量）
-- 模糊音标志：内置 + 常见误拼
-- 页面大小：9 个候选词
+在 `$HOME/.config/ibus-libime.ini` 中可以配置以下选项：
+
+```ini
+[general]
+# 日志级别: DEBUG, INFO, WARN, ERROR
+loglevel=INFO
+
+# 候选词数量 (默认: 3)
+nbest=3
+
+# 每页显示的候选词数量 (默认: 9)
+pagesize=9
+
+# 模糊音标志 (默认: 0，使用内置规则)
+# 具体值参考 LibIME 的 PinyinFuzzyFlag 枚举
+fuzzyflags=0
+```
+
+支持的配置项：
+- **loglevel**: 日志级别，可选 DEBUG、INFO、WARN、ERROR
+- **nbest**: 生成的候选词数量，影响选词准确度
+- **pagesize**: 每页显示的候选词数量，建议设置为 9 或 10
+- **fuzzyflags**: 模糊音标志，0 表示使用默认的 Inner + CommonTypo
 
 ## 故障排查
 
