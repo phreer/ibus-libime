@@ -33,6 +33,7 @@ set(SOURCES
     src/main.cpp
     src/ibus_engine.cpp
     src/pinyin_engine.cpp
+    src/configs.cpp
 )
 
 # Create executable
