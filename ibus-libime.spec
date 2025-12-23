@@ -1,5 +1,7 @@
+%global version %(cat %{_sourcedir}/VERSION 2>/dev/null || echo 0.1.0)
+
 Name:           ibus-libime
-Version:        0.13
+Version:        %{version}
 Release:        1%{?dist}
 Summary:        An ibus front-end for libime
 
@@ -45,50 +47,3 @@ ibus-libime is an ibus front-end for libime.
 
 
 %changelog
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.13-1
-- test (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.12-1
-- test (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.11-1
-- test (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.10-1
-- test (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.9-1
-- test (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.8-1
-- test (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.7-1
-- Don't use icon for language state (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.6-1
-- Fix paths (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.5-1
-- Fix cmake lists (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.4-1
-- Use %%cmake_install (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.3-1
-- Use standard cmake commands in spec (weifeng.liu@intel.com)
-
-* Wed Dec 17 2025 Weifeng Liu <weifeng.liu@intel.com> 0.2-1
-- Set install prefix (weifeng.liu@intel.com)
-
-* Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com> 0.5-1
-- Add installed files (weifeng.liu@intel.com)
-
-* Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com> 0.4-1
-- Add deps (weifeng.liu@intel.com)
-
-* Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com> 0.3-1
-- Add deps (weifeng.liu@intel.com)
-
-* Tue Dec 16 2025 Weifeng Liu <weifeng.liu@intel.com>
-- 
