@@ -291,9 +291,6 @@ bool PinyinEngine::processControlKey(guint keyval, guint modifiers) {
     return FALSE;
 
   case IBUS_KEY_Page_Up:
-    pageUp();
-    return TRUE;
-
   case IBUS_KEY_minus:
     if (context_->size() > 0) {
       pageUp();
@@ -302,9 +299,6 @@ bool PinyinEngine::processControlKey(guint keyval, guint modifiers) {
     return FALSE;
 
   case IBUS_KEY_Page_Down:
-    pageDown();
-    return TRUE;
-
   case IBUS_KEY_equal:
     if (context_->size() > 0) {
       pageDown();
