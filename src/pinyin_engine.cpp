@@ -147,7 +147,8 @@ bool PinyinEngine::processKeyEvent(guint keyval, guint keycode,
   }
 
   // Pass through if has Ctrl, Alt or Super (Win) modifier
-  if (modifiers & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK | IBUS_SUPER_MASK)) {
+  if (modifiers &
+      (IBUS_CONTROL_MASK | IBUS_MOD1_MASK | IBUS_MOD4_MASK | IBUS_SUPER_MASK)) {
     LOG_DEBUG("Passing through: has Ctrl/Alt/Super modifier");
     return FALSE;
   }
