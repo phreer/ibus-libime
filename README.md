@@ -87,16 +87,31 @@ nbest=3
 # 每页显示的候选词数量 (默认: 9)
 pagesize=9
 
-# 模糊音标志 (默认: 0，使用内置规则)
-# 具体值参考 LibIME 的 PinyinFuzzyFlag 枚举
-fuzzyflags=0
+# 模糊音标志 (默认: 空，使用内置规则)
+# 可以使用逗号分隔的标志名称，支持的标志有：
+# CommonTypo, V_U, AN_ANG, EN_ENG, IAN_IANG, IN_ING, U_OU, UAN_UANG,
+# C_CH, F_H, L_N, S_SH, Z_ZH, VE_UE, Inner, InnerShort, PartialFinal,
+# PartialSp, AdvancedTypo, Correction, L_R
+fuzzyflags=Inner,CommonTypo
 ```
 
 支持的配置项：
 - **loglevel**: 日志级别，可选 DEBUG、INFO、WARN、ERROR
 - **nbest**: 生成的候选词数量，影响选词准确度
 - **pagesize**: 每页显示的候选词数量，建议设置为 9 或 10
-- **fuzzyflags**: 模糊音标志，0 表示使用默认的 Inner + CommonTypo
+- **fuzzyflags**: 模糊音标志，使用逗号分隔的标志名称
+  - **CommonTypo**: 常见错误（如 ng/gn）
+  - **Inner**: 内部模糊音
+  - **V_U**: v/u 不分
+  - **AN_ANG**: an/ang 不分
+  - **EN_ENG**: en/eng 不分
+  - **IAN_IANG**: ian/iang 不分
+  - **IN_ING**: in/ing 不分
+  - **C_CH**: c/ch 不分
+  - **S_SH**: s/sh 不分
+  - **Z_ZH**: z/zh 不分
+  - **L_N**: l/n 不分
+  - 更多标志参考 LibIME 的 PinyinFuzzyFlag 枚举
 
 ## 故障排查
 
