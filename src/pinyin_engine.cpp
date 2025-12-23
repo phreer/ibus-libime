@@ -24,8 +24,9 @@ static std::map<std::string, PinyinContextStatus> context_status_map;
 std::shared_ptr<PinyinIME> PinyinEngine::shared_ime_ = nullptr;
 
 PinyinEngine::PinyinEngine(IBusEngine *engine)
-    : engine_(engine), page_size_(9), current_page_(0), english_mode_(false),
-      shift_pressed_(false), mode_prop_(nullptr), prop_list_(nullptr) {
+    : engine_(engine), page_size_(Config::getInstance().getPageSize()),
+      current_page_(0), english_mode_(false), shift_pressed_(false),
+      mode_prop_(nullptr), prop_list_(nullptr) {
   LOG_INFO("PinyinEngine constructor called");
   initializeIME();
   initProperties();
@@ -68,10 +69,22 @@ void PinyinEngine::initializeSharedIME() {
   LOG_INFO("Dictionary loaded");
 
   // Configure IME
-  shared_ime_->setNBest(3);
-  PinyinFuzzyFlags flags{PinyinFuzzyFlag::Inner, PinyinFuzzyFlag::CommonTypo};
+  int nbest = Config::getInstance().getNBest();
+  shared_ime_->setNBest(nbest);
+
+  int fuzzyFlagsValue = Config::getInstance().getFuzzyFlags();
+  PinyinFuzzyFlags flags;
+  if (fuzzyFlagsValue == 0) {
+    // Default: Inner + CommonTypo
+    flags =
+        PinyinFuzzyFlags{PinyinFuzzyFlag::Inner, PinyinFuzzyFlag::CommonTypo};
+  } else {
+    // Use configured flags
+    flags = static_cast<PinyinFuzzyFlags>(fuzzyFlagsValue);
+  }
   shared_ime_->setFuzzyFlags(flags);
-  LOG_INFO("Shared IME configured: NBest=3, FuzzyFlags enabled");
+  LOG_INFO("Shared IME configured: NBest={}, FuzzyFlags={}", nbest,
+           fuzzyFlagsValue);
 }
 
 void PinyinEngine::cleanupSharedIME() {

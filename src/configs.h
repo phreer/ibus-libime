@@ -16,6 +16,15 @@ public:
   // Returns: "DEBUG", "INFO", "WARN", "ERROR", or nullptr if not set
   const char *getLogLevel();
 
+  // Get NBest value (number of candidates)
+  int getNBest() const;
+
+  // Get page size (candidates per page)
+  int getPageSize() const;
+
+  // Get fuzzy flags as integer
+  int getFuzzyFlags() const;
+
   // Get config file path
   const std::string &getConfigPath() const { return configPath_; }
 
@@ -29,6 +38,9 @@ private:
   std::string configPath_;
   GKeyFile *keyFile_;
   char *logLevel_;
+  int nbest_;
+  int pageSize_;
+  int fuzzyFlags_;
 
   Config(const Config &) = delete;
   Config &operator=(const Config &) = delete;
