@@ -238,8 +238,11 @@ bool PinyinEngine::processInputKey(guint keyval, guint modifiers) {
 
   // Handle space - select first candidate
   if (keyval == ' ' && context_->size() > 0) {
-    LOG_DEBUG("Space pressed -> selecting first candidate");
-    selectCandidate(0);
+    size_t index = current_page_ * page_size_;
+    LOG_DEBUG(
+        "Space pressed -> selecting first candidate on page {} (index {})",
+        current_page_, index);
+    selectCandidate(index);
     return TRUE;
   }
 
