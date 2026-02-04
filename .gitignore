@@ -1,0 +1,9 @@
+/build/
+/builddir/
+/rpmbuild/
+/rpms/
+/SRPMS/
+compile_commands.json
+/.cache/
+*.rpm
+*.tar.gz
