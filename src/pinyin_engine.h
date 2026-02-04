@@ -52,6 +52,10 @@ private:
   bool english_mode_; // true = English mode, false = Chinese mode
   bool shift_pressed_;
 
+  // Punctuation state
+  bool double_quote_left_; // true = next is left quote, false = right quote
+  bool single_quote_left_; // true = next is left quote, false = right quote
+
   // Properties
   IBusProperty *mode_prop_;
   IBusPropList *prop_list_;
