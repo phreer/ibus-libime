@@ -26,6 +26,7 @@ std::shared_ptr<PinyinIME> PinyinEngine::shared_ime_ = nullptr;
 PinyinEngine::PinyinEngine(IBusEngine *engine)
     : engine_(engine), page_size_(Config::getInstance().getPageSize()),
       current_page_(0), english_mode_(false), shift_pressed_(false),
+      double_quote_left_(true), single_quote_left_(true),
       mode_prop_(nullptr), prop_list_(nullptr) {
   LOG_INFO("PinyinEngine constructor called");
   initializeIME();
@@ -417,11 +418,26 @@ void PinyinEngine::commitString(const std::string &text) {
 }
 
 std::string PinyinEngine::convertPunctuation(guint keyval) {
+  // Handle quotes with alternating left/right
+  if (keyval == '"') {
+    std::string result = double_quote_left_ ? "“" : "”";
+    double_quote_left_ = !double_quote_left_;
+    LOG_DEBUG("Converting double quote: {} -> {}", (char)keyval, result);
+    return result;
+  }
+
+  if (keyval == '\'') {
+    std::string result = single_quote_left_ ? "‘" : "’";
+    single_quote_left_ = !single_quote_left_;
+    LOG_DEBUG("Converting single quote: {} -> {}", (char)keyval, result);
+    return result;
+  }
+
   // Map of English punctuation to Chinese punctuation
   static const std::map<guint, std::string> punct_map = {
       {',', "，"},  {'.', "。"}, {'?', "？"}, {'!', "！"}, {';', "；"},
       {':', "："},  {'(', "（"}, {')', "）"}, {'[', "【"}, {']', "】"},
-      {'<', "《"},  {'>', "》"}, {'"', "\""}, {'\'', "'"}, {'~', "～"},
+      {'<', "《"},  {'>', "》"}, {'~', "～"},
       {'\\', "、"}, {'$', "￥"}, {'^', "……"}, {'_', "——"},
   };
 
