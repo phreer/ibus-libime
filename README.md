@@ -1,6 +1,6 @@
 # IBus LibIME
 
-一个基于 LibIME 的现代化 IBus 中文拼音输入法前端。
+一个基于 [LibIME](https://github.com/fcitx/libime) 的现代化 IBus 中文拼音输入法前端。
 
 ## 编译安装
 
