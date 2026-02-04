@@ -277,8 +277,11 @@ bool PinyinEngine::processControlKey(guint keyval, guint modifiers) {
     return FALSE;
 
   case IBUS_KEY_Escape:
-    reset();
-    return TRUE;
+    if (context_->size() > 0) {
+      reset();
+      return TRUE;
+    }
+    return FALSE;
 
   case IBUS_KEY_Left:
     if (context_->cursor() > 0) {
