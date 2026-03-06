@@ -73,6 +73,8 @@ private:
   bool processControlKey(guint keyval, guint modifiers);
   std::string convertPunctuation(guint keyval);
   static std::string getDataPath(const std::string &filename);
+  static std::string getUserDataDir();
+  static void saveUserData();
 };
 
 #endif // PINYIN_ENGINE_H

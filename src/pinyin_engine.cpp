@@ -6,6 +6,7 @@
 #include <libime/pinyin/pinyindictionary.h>
 
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <map>
 
@@ -67,7 +68,45 @@ void PinyinEngine::initializeSharedIME() {
   LOG_INFO("Dictionary path: {}", dict_path);
   shared_ime_->dict()->load(PinyinDictionary::SystemDict, dict_path.c_str(),
                             PinyinDictFormat::Binary);
-  LOG_INFO("Dictionary loaded");
+  LOG_INFO("System dictionary loaded");
+
+  // Load user data
+  std::string user_data_dir = getUserDataDir();
+  g_mkdir_with_parents(user_data_dir.c_str(), 0700);
+
+  // Load user dict
+  {
+    std::string user_dict_path = user_data_dir + "/user.dict";
+    std::ifstream in(user_dict_path, std::ios::binary);
+    if (in.is_open()) {
+      try {
+        shared_ime_->dict()->load(PinyinDictionary::UserDict, in,
+                                   PinyinDictFormat::Binary);
+        LOG_INFO("User dict loaded from {}", user_dict_path);
+      } catch (const std::exception &e) {
+        LOG_WARN("Failed to load user dict (starting fresh): {}", e.what());
+      }
+    } else {
+      LOG_INFO("No user dict found at {}, starting fresh", user_dict_path);
+    }
+  }
+
+  // Load user history bigram
+  {
+    std::string user_history_path = user_data_dir + "/user.history";
+    std::ifstream in(user_history_path, std::ios::binary);
+    if (in.is_open()) {
+      try {
+        shared_ime_->model()->load(in);
+        LOG_INFO("User history loaded from {}", user_history_path);
+      } catch (const std::exception &e) {
+        LOG_WARN("Failed to load user history (starting fresh): {}", e.what());
+      }
+    } else {
+      LOG_INFO("No user history found at {}, starting fresh",
+               user_history_path);
+    }
+  }
 
   // Configure IME
   int nbest = Config::getInstance().getNBest();
@@ -90,6 +129,8 @@ void PinyinEngine::initializeSharedIME() {
 
 void PinyinEngine::cleanupSharedIME() {
   if (shared_ime_) {
+    LOG_INFO("Saving user data before cleanup");
+    saveUserData();
     LOG_INFO("Cleaning up shared IME");
     shared_ime_.reset();
   }
@@ -102,6 +143,65 @@ std::string PinyinEngine::getDataPath(const std::string &filename) {
   }
   // Default fallback path
   return std::string(LIBIME_INSTALL_PKGDATADIR) + "/" + filename;
+}
+
+std::string PinyinEngine::getUserDataDir() {
+  const char *data_dir = g_get_user_data_dir();
+  if (!data_dir || data_dir[0] == '\0') {
+    return "/tmp/ibus-libime";
+  }
+  return std::string(data_dir) + "/ibus-libime";
+}
+
+void PinyinEngine::saveUserData() {
+  if (!shared_ime_) {
+    return;
+  }
+
+  std::string user_data_dir = getUserDataDir();
+  g_mkdir_with_parents(user_data_dir.c_str(), 0700);
+
+  // Save user dict (atomic write via temp file)
+  {
+    std::string dict_path = user_data_dir + "/user.dict";
+    std::string tmp_path = dict_path + ".tmp";
+    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
+    if (out.is_open()) {
+      try {
+        shared_ime_->dict()->save(PinyinDictionary::UserDict, out,
+                                   PinyinDictFormat::Binary);
+        out.flush();
+        out.close();
+        std::rename(tmp_path.c_str(), dict_path.c_str());
+        LOG_INFO("User dict saved to {}", dict_path);
+      } catch (const std::exception &e) {
+        LOG_ERROR("Failed to save user dict: {}", e.what());
+      }
+    } else {
+      LOG_ERROR("Failed to open user dict tmp file for writing: {}", tmp_path);
+    }
+  }
+
+  // Save user history bigram (atomic write via temp file)
+  {
+    std::string history_path = user_data_dir + "/user.history";
+    std::string tmp_path = history_path + ".tmp";
+    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
+    if (out.is_open()) {
+      try {
+        shared_ime_->model()->save(out);
+        out.flush();
+        out.close();
+        std::rename(tmp_path.c_str(), history_path.c_str());
+        LOG_INFO("User history saved to {}", history_path);
+      } catch (const std::exception &e) {
+        LOG_ERROR("Failed to save user history: {}", e.what());
+      }
+    } else {
+      LOG_ERROR("Failed to open user history tmp file for writing: {}",
+                tmp_path);
+    }
+  }
 }
 
 void PinyinEngine::initializeIME() {
@@ -345,9 +445,9 @@ void PinyinEngine::selectCandidate(size_t index) {
     if (context_->selected()) {
       std::string sentence = context_->sentence();
       LOG_INFO("Committing sentence: {}", sentence);
-      commitString(sentence);
-      context_->learn();
+      context_->learn(); // must be called before context_->clear()
       LOG_DEBUG("Learning completed");
+      commitString(sentence);
       reset();
     } else {
       LOG_DEBUG("Partial selection, resetting page and updating UI");
