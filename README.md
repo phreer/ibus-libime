@@ -94,6 +94,12 @@ pagesize=9
 # 中文模式下提供英文前缀候选 (默认: true)
 englishcandidates=true
 
+# 记录确认提交的中文输入历史 (默认: true)
+recordinputhistory=true
+
+# 学习已选择的中文候选并更新用户词库 (默认: true)
+learnuserdictionary=true
+
 # 模糊音标志 (默认: 空，使用内置规则)
 # 可以使用逗号分隔的标志名称，支持的标志有：
 # CommonTypo, V_U, AN_ANG, EN_ENG, IAN_IANG, IN_ING, U_OU, UAN_UANG,
@@ -107,6 +113,10 @@ fuzzyflags=Inner,CommonTypo
 - **nbest**: 生成的候选词数量，影响选词准确度
 - **pagesize**: 每页显示的候选词数量，建议设置为 9 或 10
 - **englishcandidates**: 中文模式下的英文前缀补全，默认 `true`；设为 `false` 关闭
+- **recordinputhistory**: 是否追加记录确认提交的中文输入历史，默认 `true`；
+  设为 `false` 后不再写入 `input-history.tsv`
+- **learnuserdictionary**: 是否通过已选中文候选学习并更新用户词库，默认 `true`；
+  设为 `false` 后停止新增学习，但仍加载和使用已有用户数据
 - **fuzzyflags**: 模糊音标志，使用逗号分隔的标志名称
   - **CommonTypo**: 常见错误（如 ng/gn）
   - **Inner**: 内部模糊音

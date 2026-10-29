@@ -537,9 +537,13 @@ void PinyinEngine::selectCandidate(size_t index) {
       LOG_INFO("Committing sentence: {}", sentence);
       if (!raw) {
         const std::string pinyin = context_->userInput();
-        context_->learn(); // must be called before context_->clear()
-        recordInputHistory(pinyin, sentence);
-        LOG_DEBUG("Learning completed");
+        if (Config::getInstance().getLearnUserDictionary()) {
+          context_->learn(); // must be called before context_->clear()
+          LOG_DEBUG("Learning completed");
+        }
+        if (Config::getInstance().getRecordInputHistory()) {
+          recordInputHistory(pinyin, sentence);
+        }
       }
       commitString(sentence);
       reset();

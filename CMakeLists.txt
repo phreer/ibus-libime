@@ -85,7 +85,7 @@ if(BUILD_TESTING)
     target_link_libraries(test-pinyin-english
         ${IBUS_LIBRARIES} ${GLIB2_LIBRARIES} ${GLIBMM_LIBRARIES}
         LibIME::Core LibIME::Pinyin)
-    foreach(mode enabled disabled missing)
+    foreach(mode enabled disabled missing history-disabled learning-disabled)
         add_test(NAME pinyin-english-${mode} COMMAND test-pinyin-english
             ${CMAKE_CURRENT_SOURCE_DIR}/data ${mode})
     endforeach()

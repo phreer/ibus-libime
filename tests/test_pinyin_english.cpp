@@ -1,5 +1,6 @@
 #include "pinyin_engine.h"
 #include "ibus_engine.h"
+#include "configs.h"
 
 #include <glibmm.h>
 
@@ -96,6 +97,12 @@ public:
       std::ofstream config(directory / "ibus-libime.ini");
       config << "[general]\npagesize=2\nenglishcandidates="
              << (mode == "disabled" ? "false" : "true") << '\n';
+      if (mode == "history-disabled") {
+        config << "recordinputhistory=false\n";
+      }
+      if (mode == "learning-disabled") {
+        config << "learnuserdictionary=false\n";
+      }
     }
     Glib::init();
     ibus_init();
@@ -206,6 +213,40 @@ int main(int argc, char **argv) {
     g_log_set_always_fatal(static_cast<GLogLevelFlags>(
         G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING));
     Fixture fixture(argv[1], argv[2]);
+    const std::string mode = argv[2];
+    if (mode == "enabled") {
+      require(Config::getInstance().getRecordInputHistory(),
+              "Input history recording must be enabled by default");
+      require(Config::getInstance().getLearnUserDictionary(),
+              "User dictionary learning must be enabled by default");
+    }
+    if (mode == "history-disabled" || mode == "learning-disabled") {
+      require(Config::getInstance().getRecordInputHistory() ==
+                  (mode != "history-disabled"),
+              "Input history setting must match its configured value");
+      require(Config::getInstance().getLearnUserDictionary() ==
+                  (mode != "learning-disabled"),
+              "User dictionary learning setting must match its configured "
+              "value");
+      fixture.focusIn("/org/freedesktop/IBus/InputContext/Test", "test");
+      fixture.type("nihao");
+      fixture.key(' ');
+      require(fixture.committed() == "你好", "Chinese commit must still work");
+      const auto historyPath =
+          fixture.directory / "ibus-libime" / "input-history.tsv";
+      if (mode == "history-disabled") {
+        require(!std::filesystem::exists(historyPath),
+                "Disabled input history must not create a history file");
+      } else {
+        std::ifstream history(historyPath);
+        const std::string contents(
+            (std::istreambuf_iterator<char>(history)), {});
+        require(contents == "nihao\t你好\n",
+                "Disabling learning must not disable input history recording");
+      }
+      std::cout << mode << " setting tests passed\n";
+      return 0;
+    }
     const char *inputContext = "/org/freedesktop/IBus/InputContext/Test";
     const char *otherContext = "/org/freedesktop/IBus/InputContext/Other";
     const char *fakeContext = "/org/freedesktop/IBus/InputContext/Fake";

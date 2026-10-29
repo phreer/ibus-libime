@@ -98,6 +98,34 @@ void Config::loadConfig() {
         g_warning("Invalid englishcandidates setting: %s", error->message);
       }
       g_error_free(error);
+      error = nullptr;
+    }
+
+    gboolean recordInputHistory =
+        g_key_file_get_boolean(keyFile_, "general", "recordinputhistory",
+                               &error);
+    if (!error) {
+      recordInputHistory_ = recordInputHistory;
+    } else {
+      if (!g_error_matches(error, G_KEY_FILE_ERROR,
+                           G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+        g_warning("Invalid recordinputhistory setting: %s", error->message);
+      }
+      g_error_free(error);
+      error = nullptr;
+    }
+
+    gboolean learnUserDictionary =
+        g_key_file_get_boolean(keyFile_, "general", "learnuserdictionary",
+                               &error);
+    if (!error) {
+      learnUserDictionary_ = learnUserDictionary;
+    } else {
+      if (!g_error_matches(error, G_KEY_FILE_ERROR,
+                           G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+        g_warning("Invalid learnuserdictionary setting: %s", error->message);
+      }
+      g_error_free(error);
     }
   } else {
     // Failed to load (file might not exist), ignore the error
