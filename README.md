@@ -121,6 +121,14 @@ fuzzyflags=Inner,CommonTypo
   - **L_N**: l/n 不分
   - 更多标志参考 LibIME 的 PinyinFuzzyFlag 枚举
 
+### 输入历史
+
+确认提交的中文候选会以追加式 TSV 保存到
+`$XDG_DATA_HOME/ibus-libime/input-history.tsv`（通常为
+`~/.local/share/ibus-libime/input-history.tsv`）。每行两列：拼音和提交的中文文本；
+重复选择会保留为多行，便于统计词频并整理个性化词库。英文候选、Enter 提交的原始拼音
+以及取消的输入不会记录。文件保存在本机用户数据目录中，不会上传。
+
 ### 中文模式英文补全
 
 在中文模式输入至少 4 个连续小写英文字母时，会提供最多 2 个英文候选。

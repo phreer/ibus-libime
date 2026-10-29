@@ -2,6 +2,7 @@
 
 #include <glibmm.h>
 #include <ibus.h>
+#include <glib/gstdio.h>
 #include <libime/core/userlanguagemodel.h>
 #include <libime/pinyin/pinyindictionary.h>
 #include <libime/pinyin/pinyinencoder.h>
@@ -190,6 +191,30 @@ std::string PinyinEngine::getUserDataDir() {
     return "/tmp/ibus-libime";
   }
   return std::string(data_dir) + "/ibus-libime";
+}
+
+void PinyinEngine::recordInputHistory(const std::string &pinyin,
+                                      const std::string &text) {
+  if (pinyin.empty() || text.empty()) {
+    return;
+  }
+
+  const std::string history_path = getUserDataDir() + "/input-history.tsv";
+  std::ofstream out(history_path, std::ios::binary | std::ios::app);
+  if (!out.is_open()) {
+    LOG_ERROR("Failed to open input history for writing: {}", history_path);
+    return;
+  }
+
+  out << pinyin << '\t' << text << '\n';
+  out.flush();
+  if (!out) {
+    LOG_ERROR("Failed to append input history: {}", history_path);
+    return;
+  }
+  if (g_chmod(history_path.c_str(), 0600) != 0) {
+    LOG_WARN("Failed to restrict input history permissions: {}", history_path);
+  }
 }
 
 void PinyinEngine::saveUserData() {
@@ -511,7 +536,9 @@ void PinyinEngine::selectCandidate(size_t index) {
       std::string sentence = context_->sentence();
       LOG_INFO("Committing sentence: {}", sentence);
       if (!raw) {
+        const std::string pinyin = context_->userInput();
         context_->learn(); // must be called before context_->clear()
+        recordInputHistory(pinyin, sentence);
         LOG_DEBUG("Learning completed");
       }
       commitString(sentence);

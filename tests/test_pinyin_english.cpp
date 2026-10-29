@@ -261,6 +261,14 @@ int main(int argc, char **argv) {
       require(!fixture.candidates().empty(), "Chinese must remain available");
       fixture.key(' ');
       require(fixture.committed() == "你好", "Chinese commit must still work");
+      {
+        std::ifstream history(fixture.directory / "ibus-libime" /
+                              "input-history.tsv");
+        const std::string contents(
+            (std::istreambuf_iterator<char>(history)), {});
+        require(contents == "nihao\t你好\n",
+                "Only committed Chinese input must be recorded as TSV");
+      }
       if (std::string(argv[2]) == "missing") {
         std::ifstream log(fixture.directory / "ibus-libime" /
                           "ibus-libime.log");

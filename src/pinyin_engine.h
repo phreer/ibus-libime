@@ -91,6 +91,8 @@ private:
   std::string convertPunctuation(guint keyval);
   static std::string getDataPath(const std::string &filename);
   static std::string getUserDataDir();
+  static void recordInputHistory(const std::string &pinyin,
+                                 const std::string &text);
   static void saveUserData();
 };
 
