@@ -693,7 +693,11 @@ std::string PinyinEngine::convertPunctuation(guint keyval) {
 
 void PinyinEngine::focusInId(const gchar *object_path, const gchar *client) {
   LOG_INFO("Focus in with ID: {} client: {}", object_path, client);
-  english_mode_ = context_status_map[std::string(object_path)].englishMode;
+  // The panel/background uses a fake context, not a separate input target.
+  if (!g_str_has_prefix(client, "fake")) {
+    input_context_id_ = object_path;
+    english_mode_ = context_status_map[input_context_id_].englishMode;
+  }
   focusIn();
 }
 
@@ -708,7 +712,9 @@ void PinyinEngine::focusIn() {
 
 void PinyinEngine::focusOutId(const gchar *object_path) {
   LOG_INFO("Focus out with ID: {}", object_path);
-  context_status_map[std::string(object_path)] = {english_mode_};
+  if (input_context_id_ == object_path) {
+    context_status_map[input_context_id_] = {english_mode_};
+  }
   focusOut();
 }
 
@@ -775,6 +781,10 @@ void PinyinEngine::cursorDown() {
 
 void PinyinEngine::toggleInputMode() {
   english_mode_ = !english_mode_;
+  // Tray activation may arrive after focus-out but before focus returns.
+  if (!input_context_id_.empty()) {
+    context_status_map[input_context_id_] = {english_mode_};
+  }
   LOG_INFO("Input mode toggled: {}", english_mode_ ? "English" : "Chinese");
   updateInputMode();
 }

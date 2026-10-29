@@ -80,7 +80,8 @@ if(BUILD_TESTING)
     add_test(NAME english-dictionary COMMAND test-english-dictionary
         ${CMAKE_CURRENT_SOURCE_DIR}/data/english-frequency.txt)
     add_executable(test-pinyin-english tests/test_pinyin_english.cpp
-        src/pinyin_engine.cpp src/configs.cpp src/english_dictionary.cpp)
+        src/ibus_engine.cpp src/pinyin_engine.cpp src/configs.cpp
+        src/english_dictionary.cpp)
     target_link_libraries(test-pinyin-english
         ${IBUS_LIBRARIES} ${GLIB2_LIBRARIES} ${GLIBMM_LIBRARIES}
         LibIME::Core LibIME::Pinyin)

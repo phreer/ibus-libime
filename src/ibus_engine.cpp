@@ -15,6 +15,7 @@ IBusFactory *IBusEngineWrapper::factory_ = nullptr;
 static void ibus_libime_engine_class_init(IBusLibIMEEngineClass *klass);
 static void ibus_libime_engine_init(IBusLibIMEEngine *engine);
 static void ibus_libime_engine_destroy(IBusObject *object);
+static void ibus_libime_engine_constructed(GObject *object);
 static GObject *
 ibus_libime_engine_constructor(GType type, guint n_construct_properties,
                                GObjectConstructParam *construct_properties);
@@ -49,6 +50,7 @@ static void ibus_libime_engine_class_init(IBusLibIMEEngineClass *klass) {
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
   IBusEngineClass *engine_class = IBUS_ENGINE_CLASS(klass);
 
+  object_class->constructed = ibus_libime_engine_constructed;
   object_class->constructor = ibus_libime_engine_constructor;
   IBUS_OBJECT_CLASS(klass)->destroy = ibus_libime_engine_destroy;
 
@@ -71,18 +73,24 @@ static void ibus_libime_engine_class_init(IBusLibIMEEngineClass *klass) {
 static GObject *
 ibus_libime_engine_constructor(GType type, guint n_construct_properties,
                                GObjectConstructParam *construct_properties) {
-  // Call parent constructor
-  GObject *obj =
-      G_OBJECT_CLASS(ibus_libime_engine_parent_class)
-          ->constructor(type, n_construct_properties, construct_properties);
+  for (guint i = 0; i < n_construct_properties; ++i) {
+    if (g_strcmp0(construct_properties[i].pspec->name, "has-focus-id") == 0) {
+      g_value_set_boolean(construct_properties[i].value, TRUE);
+    }
+  }
+  return G_OBJECT_CLASS(ibus_libime_engine_parent_class)
+      ->constructor(type, n_construct_properties, construct_properties);
+}
 
-  // Set has-focus-id to TRUE if not set during construction
-  g_object_set(obj, "has-focus-id", TRUE, NULL);
-  return obj;
+static void ibus_libime_engine_constructed(GObject *object) {
+  G_OBJECT_CLASS(ibus_libime_engine_parent_class)->constructed(object);
+  auto *engine = reinterpret_cast<IBusLibIMEEngine *>(object);
+  // Property registration needs the connection supplied at construction.
+  engine->pinyin_engine = new PinyinEngine(IBUS_ENGINE(engine));
 }
 
 static void ibus_libime_engine_init(IBusLibIMEEngine *engine) {
-  engine->pinyin_engine = new PinyinEngine(IBUS_ENGINE(engine));
+  engine->pinyin_engine = nullptr;
 }
 
 static void ibus_libime_engine_destroy(IBusObject *object) {

@@ -65,6 +65,7 @@ private:
   // Input mode state
   bool english_mode_; // true = English mode, false = Chinese mode
   bool shift_pressed_;
+  std::string input_context_id_;
 
   // Punctuation state
   bool double_quote_left_; // true = next is left quote, false = right quote

@@ -1,4 +1,5 @@
 #include "pinyin_engine.h"
+#include "ibus_engine.h"
 
 #include <glibmm.h>
 
@@ -22,6 +23,7 @@ struct Output {
   std::vector<std::string> commits;
   std::string preedit;
   bool lookupVisible = false;
+  std::string modeLabel;
 
   static GDBusMessage *filter(GDBusConnection *, GDBusMessage *message,
                               gboolean incoming, gpointer data) {
@@ -35,7 +37,9 @@ struct Output {
     if (g_strcmp0(member, "HideLookupTable") == 0) {
       output.candidates.clear();
       output.lookupVisible = false;
-    } else if (g_strcmp0(member, "UpdateLookupTable") == 0 ||
+    } else if (g_strcmp0(member, "UpdateProperty") == 0 ||
+               g_strcmp0(member, "RegisterProperties") == 0 ||
+               g_strcmp0(member, "UpdateLookupTable") == 0 ||
                g_strcmp0(member, "CommitText") == 0 ||
                g_strcmp0(member, "UpdatePreeditText") == 0) {
       GVariant *body = g_dbus_message_get_body(message);
@@ -43,7 +47,15 @@ struct Output {
       auto *object = ibus_serializable_deserialize(value);
       require(object != nullptr, "Cannot deserialize IBus output");
       g_object_ref_sink(object);
-      if (IBUS_IS_LOOKUP_TABLE(object)) {
+      if (IBUS_IS_PROPERTY(object) || IBUS_IS_PROP_LIST(object)) {
+        auto *property = IBUS_IS_PROPERTY(object)
+                             ? IBUS_PROPERTY(object)
+                             : ibus_prop_list_get(IBUS_PROP_LIST(object), 0);
+        if (property &&
+            g_strcmp0(ibus_property_get_key(property), "InputMode") == 0) {
+          output.modeLabel = ibus_property_get_label(property)->text;
+        }
+      } else if (IBUS_IS_LOOKUP_TABLE(object)) {
         gboolean visible;
         g_variant_get_child(body, 1, "b", &visible);
         output.lookupVisible = visible;
@@ -99,16 +111,16 @@ public:
     require(connection != nullptr, error ? error->message : "No connection");
     filter = g_dbus_connection_add_filter(connection, Output::filter, &output,
                                           nullptr);
-    ibusEngine = ibus_engine_new("test", "/org/freedesktop/IBus/Engine/Test",
-                                 connection);
+    ibusEngine = IBUS_ENGINE(g_object_new(
+        IBUS_TYPE_LIBIME_ENGINE, "engine-name", "test", "object-path",
+        "/org/freedesktop/IBus/Engine/Test", "connection", connection, nullptr));
     g_object_ref_sink(ibusEngine);
-    engine = std::make_unique<PinyinEngine>(ibusEngine);
+    engine = reinterpret_cast<IBusLibIMEEngine *>(ibusEngine)->pinyin_engine;
   }
 
   ~Fixture() {
-    engine.reset();
-    PinyinEngine::cleanupSharedIME();
     g_object_unref(ibusEngine);
+    PinyinEngine::cleanupSharedIME();
     g_dbus_connection_flush_sync(connection, nullptr, nullptr);
     g_dbus_connection_remove_filter(connection, filter);
     g_dbus_connection_close_sync(connection, nullptr, nullptr);
@@ -148,13 +160,32 @@ public:
     return output.commits.back();
   }
 
+  void focusIn(const char *id, const char *client = "test") {
+    g_signal_emit_by_name(ibusEngine, "focus-in-id", id, client);
+  }
+
+  void focusOut(const char *id) {
+    g_signal_emit_by_name(ibusEngine, "focus-out-id", id);
+  }
+
+  void activateMode() {
+    g_signal_emit_by_name(ibusEngine, "property-activate", "InputMode",
+                          PROP_STATE_UNCHECKED);
+  }
+
+  void requireMode(const char *label) {
+    flush();
+    std::lock_guard lock(output.mutex);
+    require(output.modeLabel == label, "Tray property must match input mode");
+  }
+
   std::filesystem::path directory;
   GTestDBus *bus = nullptr;
   GDBusConnection *connection = nullptr;
   IBusEngine *ibusEngine = nullptr;
   guint filter = 0;
   Output output;
-  std::unique_ptr<PinyinEngine> engine;
+  PinyinEngine *engine = nullptr;
 };
 
 bool hasEnglish(const std::vector<std::string> &words) {
@@ -174,6 +205,51 @@ int main(int argc, char **argv) {
     g_log_set_always_fatal(static_cast<GLogLevelFlags>(
         G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING));
     Fixture fixture(argv[1], argv[2]);
+    const char *inputContext = "/org/freedesktop/IBus/InputContext/Test";
+    const char *otherContext = "/org/freedesktop/IBus/InputContext/Other";
+    const char *fakeContext = "/org/freedesktop/IBus/InputContext/Fake";
+    fixture.focusIn(inputContext, "gnome-shell");
+    fixture.requireMode("中");
+    fixture.focusOut(inputContext);
+    fixture.focusIn(fakeContext, "fake");
+    fixture.activateMode();
+    fixture.requireMode("En");
+    fixture.focusOut(fakeContext);
+    fixture.focusIn(inputContext, "gnome-shell");
+    fixture.requireMode("En");
+    require(!fixture.key('a'),
+            "Tray switch to English must survive restoring input focus");
+    fixture.focusOut(inputContext);
+    fixture.focusIn(fakeContext, "fake");
+    fixture.requireMode("En");
+    fixture.focusOut(fakeContext);
+    fixture.focusIn(otherContext);
+    fixture.requireMode("中");
+    require(fixture.key('a'), "Other input contexts must retain Chinese mode");
+    fixture.key(IBUS_KEY_Escape);
+    fixture.focusOut(otherContext);
+    fixture.focusIn(inputContext, "gnome-shell");
+    fixture.requireMode("En");
+    require(!fixture.key('a'), "Original input context must retain English mode");
+    fixture.focusOut(inputContext);
+    fixture.focusIn(fakeContext, "fake");
+    fixture.activateMode();
+    fixture.requireMode("中");
+    fixture.focusOut(fakeContext);
+    fixture.focusIn(inputContext, "gnome-shell");
+    fixture.requireMode("中");
+    require(fixture.key('a'),
+            "Tray switch to Chinese must survive restoring input focus");
+    fixture.key(IBUS_KEY_Escape);
+    fixture.activateMode();
+    fixture.focusIn(inputContext, "gnome-shell");
+    require(!fixture.key('a'),
+            "Focused tray switch must persist without a focus-out callback");
+    fixture.key(IBUS_Shift_L);
+    fixture.key(IBUS_Shift_L, IBUS_RELEASE_MASK);
+    fixture.focusIn(inputContext, "gnome-shell");
+    require(fixture.key('a'), "Shift mode changes must persist on focus-in");
+    fixture.key(IBUS_KEY_Escape);
     if (std::string(argv[2]) != "enabled") {
       fixture.type("hello");
       require(!hasEnglish(fixture.candidates()),
