@@ -14,7 +14,7 @@ IBusFactory *IBusEngineWrapper::factory_ = nullptr;
 // Forward declarations
 static void ibus_libime_engine_class_init(IBusLibIMEEngineClass *klass);
 static void ibus_libime_engine_init(IBusLibIMEEngine *engine);
-static void ibus_libime_engine_destroy(IBusLibIMEEngine *engine);
+static void ibus_libime_engine_destroy(IBusObject *object);
 static GObject *
 ibus_libime_engine_constructor(GType type, guint n_construct_properties,
                                GObjectConstructParam *construct_properties);
@@ -50,6 +50,7 @@ static void ibus_libime_engine_class_init(IBusLibIMEEngineClass *klass) {
   IBusEngineClass *engine_class = IBUS_ENGINE_CLASS(klass);
 
   object_class->constructor = ibus_libime_engine_constructor;
+  IBUS_OBJECT_CLASS(klass)->destroy = ibus_libime_engine_destroy;
 
   engine_class->process_key_event = ibus_libime_engine_process_key_event;
   engine_class->reset = ibus_libime_engine_reset;
@@ -84,7 +85,8 @@ static void ibus_libime_engine_init(IBusLibIMEEngine *engine) {
   engine->pinyin_engine = new PinyinEngine(IBUS_ENGINE(engine));
 }
 
-static void ibus_libime_engine_destroy(IBusLibIMEEngine *engine) {
+static void ibus_libime_engine_destroy(IBusObject *object) {
+  IBusLibIMEEngine *engine = (IBusLibIMEEngine *)object;
   delete engine->pinyin_engine;
   engine->pinyin_engine = nullptr;
 

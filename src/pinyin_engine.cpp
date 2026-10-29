@@ -36,6 +36,8 @@ PinyinEngine::PinyinEngine(IBusEngine *engine)
 }
 
 PinyinEngine::~PinyinEngine() {
+  mode_timeout_.disconnect();
+
   // Clean up properties
   if (mode_prop_) {
     g_object_unref(mode_prop_);
@@ -690,8 +692,13 @@ void PinyinEngine::updateInputMode() {
   ibus_engine_update_auxiliary_text(engine_, text, TRUE);
   ibus_engine_show_auxiliary_text(engine_);
 
-  Glib::signal_timeout().connect_seconds_once(
-      [this]() { ibus_engine_hide_auxiliary_text(engine_); }, 1);
+  mode_timeout_.disconnect();
+  mode_timeout_ = Glib::signal_timeout().connect_seconds(
+      [this]() {
+        ibus_engine_hide_auxiliary_text(engine_);
+        return false;
+      },
+      1);
 
   // Update icon
   updateModeProperty();

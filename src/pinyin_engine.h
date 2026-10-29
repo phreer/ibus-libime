@@ -4,6 +4,7 @@
 #include <ibus.h>
 #include <libime/pinyin/pinyincontext.h>
 #include <libime/pinyin/pinyinime.h>
+#include <sigc++/connection.h>
 
 #include <memory>
 #include <string>
@@ -59,6 +60,7 @@ private:
   // Properties
   IBusProperty *mode_prop_;
   IBusPropList *prop_list_;
+  sigc::connection mode_timeout_;
 
   // Helper methods
   void updateInputMode();
