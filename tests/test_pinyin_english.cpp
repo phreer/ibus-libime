@@ -1,0 +1,323 @@
+#include "pinyin_engine.h"
+
+#include <glibmm.h>
+
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <stdexcept>
+
+namespace {
+void require(bool condition, const char *message) {
+  if (!condition) {
+    throw std::runtime_error(message);
+  }
+}
+
+struct Output {
+  std::mutex mutex;
+  std::vector<std::string> candidates;
+  std::vector<std::string> commits;
+
+  static GDBusMessage *filter(GDBusConnection *, GDBusMessage *message,
+                              gboolean incoming, gpointer data) {
+    if (incoming || g_dbus_message_get_message_type(message) !=
+                        G_DBUS_MESSAGE_TYPE_SIGNAL) {
+      return message;
+    }
+    const char *member = g_dbus_message_get_member(message);
+    auto &output = *static_cast<Output *>(data);
+    std::lock_guard lock(output.mutex);
+    if (g_strcmp0(member, "HideLookupTable") == 0) {
+      output.candidates.clear();
+    } else if (g_strcmp0(member, "UpdateLookupTable") == 0 ||
+               g_strcmp0(member, "CommitText") == 0) {
+      GVariant *body = g_dbus_message_get_body(message);
+      GVariant *value = g_variant_get_child_value(body, 0);
+      auto *object = ibus_serializable_deserialize(value);
+      require(object != nullptr, "Cannot deserialize IBus output");
+      g_object_ref_sink(object);
+      if (IBUS_IS_LOOKUP_TABLE(object)) {
+        output.candidates.clear();
+        auto *table = IBUS_LOOKUP_TABLE(object);
+        for (guint i = 0; i < ibus_lookup_table_get_number_of_candidates(table);
+             ++i) {
+          output.candidates.emplace_back(
+              ibus_lookup_table_get_candidate(table, i)->text);
+        }
+      } else if (IBUS_IS_TEXT(object)) {
+        output.commits.emplace_back(IBUS_TEXT(object)->text);
+      }
+      g_object_unref(object);
+      g_variant_unref(value);
+    }
+    return message;
+  }
+};
+
+class Fixture {
+public:
+  explicit Fixture(const char *dataPath, const std::string &mode) {
+    gchar *path = g_dir_make_tmp("ibus-libime-engine-XXXXXX", nullptr);
+    require(path != nullptr, "Cannot create isolated test directory");
+    directory = path;
+    g_free(path);
+    g_setenv("XDG_CONFIG_HOME", directory.c_str(), TRUE);
+    g_setenv("XDG_DATA_HOME", directory.c_str(), TRUE);
+    g_setenv("XDG_STATE_HOME", directory.c_str(), TRUE);
+    g_setenv("IBUS_LIBIME_DATA_DIR",
+             mode == "missing" ? directory.c_str() : dataPath, TRUE);
+    {
+      std::ofstream config(directory / "ibus-libime.ini");
+      config << "[general]\npagesize=2\nenglishcandidates="
+             << (mode == "disabled" ? "false" : "true") << '\n';
+    }
+    Glib::init();
+    ibus_init();
+    bus = g_test_dbus_new(G_TEST_DBUS_NONE);
+    g_test_dbus_up(bus);
+    GError *error = nullptr;
+    connection = g_dbus_connection_new_for_address_sync(
+        g_test_dbus_get_bus_address(bus),
+        static_cast<GDBusConnectionFlags>(
+            G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT |
+            G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION),
+        nullptr, nullptr, &error);
+    require(connection != nullptr, error ? error->message : "No connection");
+    filter = g_dbus_connection_add_filter(connection, Output::filter, &output,
+                                          nullptr);
+    ibusEngine = ibus_engine_new("test", "/org/freedesktop/IBus/Engine/Test",
+                                 connection);
+    g_object_ref_sink(ibusEngine);
+    engine = std::make_unique<PinyinEngine>(ibusEngine);
+  }
+
+  ~Fixture() {
+    engine.reset();
+    PinyinEngine::cleanupSharedIME();
+    g_object_unref(ibusEngine);
+    g_dbus_connection_flush_sync(connection, nullptr, nullptr);
+    g_dbus_connection_remove_filter(connection, filter);
+    g_dbus_connection_close_sync(connection, nullptr, nullptr);
+    g_object_unref(connection);
+    g_test_dbus_down(bus);
+    g_object_unref(bus);
+    std::filesystem::remove_all(directory);
+  }
+
+  bool key(guint key, guint modifiers = 0) {
+    const bool handled = engine->processKeyEvent(key, 0, modifiers);
+    flush();
+    return handled;
+  }
+
+  void type(const std::string &text) {
+    for (unsigned char ch : text) {
+      require(key(ch), "Letter must be consumed in Chinese mode");
+    }
+  }
+
+  void flush() {
+    require(g_dbus_connection_flush_sync(connection, nullptr, nullptr),
+            "Cannot flush IBus output");
+  }
+
+  std::vector<std::string> candidates() {
+    flush();
+    std::lock_guard lock(output.mutex);
+    return output.candidates;
+  }
+
+  std::string committed() {
+    flush();
+    std::lock_guard lock(output.mutex);
+    require(!output.commits.empty(), "Expected an IBus commit");
+    return output.commits.back();
+  }
+
+  std::filesystem::path directory;
+  GTestDBus *bus = nullptr;
+  GDBusConnection *connection = nullptr;
+  IBusEngine *ibusEngine = nullptr;
+  guint filter = 0;
+  Output output;
+  std::unique_ptr<PinyinEngine> engine;
+};
+
+bool hasEnglish(const std::vector<std::string> &words) {
+  return std::any_of(words.begin(), words.end(), [](const std::string &word) {
+    return !word.empty() && std::all_of(word.begin(), word.end(), [](char ch) {
+      return ch >= 'a' && ch <= 'z';
+    });
+  });
+}
+} // namespace
+
+int main(int argc, char **argv) {
+  if (argc != 3) {
+    return 1;
+  }
+  try {
+    g_log_set_always_fatal(static_cast<GLogLevelFlags>(
+        G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING));
+    Fixture fixture(argv[1], argv[2]);
+    if (std::string(argv[2]) != "enabled") {
+      fixture.type("hello");
+      require(!hasEnglish(fixture.candidates()),
+              "Disabled/missing dictionary must not generate English");
+      fixture.key(IBUS_KEY_Return);
+      require(fixture.committed() == "hello", "Raw commit must still work");
+      fixture.type("nihao");
+      require(!fixture.candidates().empty(), "Chinese must remain available");
+      fixture.key(' ');
+      require(fixture.committed() == "你好", "Chinese commit must still work");
+      if (std::string(argv[2]) == "missing") {
+        std::ifstream log(fixture.directory / "ibus-libime" /
+                          "ibus-libime.log");
+        const std::string contents((std::istreambuf_iterator<char>(log)), {});
+        require(contents.find("English completion unavailable") !=
+                    std::string::npos,
+                "Missing dictionary must produce an explicit warning");
+      }
+      std::cout << argv[2] << " fallback tests passed\n";
+      return 0;
+    }
+
+    for (const auto *input :
+         {"zhi", "zhiv", "shi", "she", "chi", "shang", "chang", "zhong"}) {
+      fixture.type(input);
+      require(!hasEnglish(fixture.candidates()),
+              "Short input, rare prefixes and full pinyin syllables must not "
+              "insert English candidates");
+      fixture.key(IBUS_KEY_Escape);
+    }
+
+    fixture.type("android");
+    auto androidCandidates = fixture.candidates();
+    require(!androidCandidates.empty() &&
+                androidCandidates.front() == "Android",
+            "Exact English must precede Chinese with unconverted letters");
+    fixture.key(' ');
+    require(fixture.committed() == "Android",
+            "Space must commit the promoted English candidate");
+
+    fixture.type("andro");
+    auto prefixCandidates = fixture.candidates();
+    auto android =
+        std::find(prefixCandidates.begin(), prefixCandidates.end(), "Android");
+    require(android != prefixCandidates.end(),
+            "Lowercase prefix must offer canonical Android spelling");
+    fixture.engine->selectPageCandidate(
+        std::distance(prefixCandidates.begin(), android));
+    require(fixture.committed() == "Android",
+            "Selecting a completion must preserve canonical casing");
+
+    fixture.type("android");
+    auto lowercaseCandidates = fixture.candidates();
+    auto lowercase = std::find(lowercaseCandidates.begin(),
+                               lowercaseCandidates.end(), "android");
+    require(lowercase != lowercaseCandidates.end(),
+            "Lowercase android must remain selectable");
+    fixture.engine->selectPageCandidate(
+        std::distance(lowercaseCandidates.begin(), lowercase));
+    require(fixture.committed() == "android",
+            "Lowercase variant must commit without case conversion");
+
+    fixture.type("and");
+    auto ambiguousCandidates = fixture.candidates();
+    require(!ambiguousCandidates.empty() &&
+                ambiguousCandidates.front() != "and",
+            "Exact English must not displace a fully converted Chinese first "
+            "candidate");
+    fixture.key(IBUS_KEY_Escape);
+
+    fixture.type("he");
+    require(!hasEnglish(fixture.candidates()),
+            "Short prefix must not show English");
+    fixture.type("llo");
+    auto words = fixture.candidates();
+    auto hello = std::find(words.begin(), words.end(), "hello");
+    require(hello != words.end(), "Exact English word must be on first page");
+    fixture.key('1' + std::distance(words.begin(), hello));
+    require(fixture.committed() == "hello",
+            "Number must commit English without space");
+    require(fixture.candidates().empty(), "Commit must clear candidates");
+
+    fixture.type("comput");
+    words = fixture.candidates();
+    require(
+        !words.empty() && words.front() != "computer",
+        "Prefix-only completion must not displace the Chinese first candidate");
+    require(std::find(words.begin(), words.end(), "computer") != words.end(),
+            "An unfinished prefix must offer a complete word");
+    fixture.key(IBUS_KEY_Escape);
+
+    fixture.type("comp");
+    words = fixture.candidates();
+    auto company = std::find(words.begin(), words.end(), "company");
+    if (company == words.end()) {
+      fixture.key(IBUS_KEY_Page_Down);
+      words = fixture.candidates();
+      company = std::find(words.begin(), words.end(), "company");
+    }
+    require(company != words.end(), "Prefix completion must be visible");
+    fixture.engine->selectPageCandidate(std::distance(words.begin(), company));
+    require(fixture.committed() == "company",
+            "Mouse/page selection must commit English");
+
+    fixture.type("nihao");
+    words = fixture.candidates();
+    require(!words.empty() && words[0] == "你好",
+            "Chinese first candidate must be preserved");
+    fixture.key(' ');
+    require(fixture.committed() == "你好", "Space must still commit Chinese");
+
+    fixture.type("comp");
+    fixture.key(IBUS_KEY_Page_Down);
+    words = fixture.candidates();
+    require(!words.empty(), "Second page must exist");
+    auto expected = words.front();
+    fixture.engine->selectPageCandidate(0);
+    require(fixture.committed() == expected,
+            "Page-local selection must use current page");
+
+    fixture.type("compu");
+    fixture.key(IBUS_KEY_Page_Down);
+    fixture.key(IBUS_KEY_BackSpace);
+    require(hasEnglish(fixture.candidates()),
+            "Editing must return to first page");
+    fixture.key(IBUS_KEY_Left);
+    require(!hasEnglish(fixture.candidates()),
+            "Middle cursor must suppress completion");
+    fixture.key(IBUS_KEY_Right);
+    require(hasEnglish(fixture.candidates()),
+            "End cursor must restore completion");
+    fixture.key('\'');
+    require(!hasEnglish(fixture.candidates()),
+            "Pinyin separator must suppress completion");
+    fixture.key(IBUS_KEY_Escape);
+    require(fixture.candidates().empty(), "Escape must clear candidates");
+
+    fixture.type("comp");
+    fixture.engine->focusOut();
+    require(fixture.candidates().empty(), "Focus out must clear candidates");
+    fixture.type("comp");
+    fixture.key(IBUS_KEY_Return);
+    require(fixture.committed() == "comp", "Enter must commit raw prefix");
+    fixture.type("hello");
+    fixture.key(IBUS_Shift_L);
+    fixture.key(IBUS_Shift_L, IBUS_RELEASE_MASK);
+    require(fixture.committed() == "hello", "Shift must commit raw input");
+    require(!fixture.key('c') && !fixture.key(' ') && !fixture.key('1'),
+            "En mode must pass keys through");
+    require(fixture.candidates().empty(), "En mode must not show candidates");
+    require(!fixture.key('c', IBUS_CONTROL_MASK),
+            "Ctrl shortcuts must pass through");
+    std::cout << "Chinese/English candidate integration tests passed\n";
+  } catch (const std::exception &error) {
+    std::cerr << error.what() << '\n';
+    return 1;
+  }
+}

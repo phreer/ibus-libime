@@ -5,7 +5,7 @@ Version:        0.1.1
 Release:        1%{?dist}
 Summary:        An ibus front-end for libime
 
-License:        GLP-3.0
+License:        GPL-3.0 AND CC-BY-SA-4.0
 URL:            empty
 Source0:        %{name}-%{version}.tar.gz
 
@@ -41,6 +41,7 @@ ibus-libime is an ibus front-end for libime.
 %files
 %{_datadir}/ibus/component/libime.xml
 %{_libexecdir}/ibus-engine-libime
+%{_datadir}/ibus-libime/
 %license LICENSE
 %doc README.md
 
@@ -70,4 +71,3 @@ ibus-libime is an ibus front-end for libime.
 - Pass-through Super key (weifeng.liu@intel.com)
 - Update README (weifeng.liu@intel.com)
 - Initial commit (weifeng.liu@intel.com)
-

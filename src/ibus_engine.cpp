@@ -178,7 +178,7 @@ static void ibus_libime_engine_candidate_clicked(IBusEngine *engine,
   IBusLibIMEEngine *libime_engine = (IBusLibIMEEngine *)engine;
   // Button 1 is left click (value is 1)
   if (button == 1) {
-    libime_engine->pinyin_engine->selectCandidate(index);
+    libime_engine->pinyin_engine->selectPageCandidate(index);
   }
 }
 

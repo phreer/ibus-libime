@@ -87,6 +87,9 @@ nbest=3
 # 每页显示的候选词数量 (默认: 9)
 pagesize=9
 
+# 中文模式下提供英文前缀候选 (默认: true)
+englishcandidates=true
+
 # 模糊音标志 (默认: 空，使用内置规则)
 # 可以使用逗号分隔的标志名称，支持的标志有：
 # CommonTypo, V_U, AN_ANG, EN_ENG, IAN_IANG, IN_ING, U_OU, UAN_UANG,
@@ -99,6 +102,7 @@ fuzzyflags=Inner,CommonTypo
 - **loglevel**: 日志级别，可选 DEBUG、INFO、WARN、ERROR
 - **nbest**: 生成的候选词数量，影响选词准确度
 - **pagesize**: 每页显示的候选词数量，建议设置为 9 或 10
+- **englishcandidates**: 中文模式下的英文前缀补全，默认 `true`；设为 `false` 关闭
 - **fuzzyflags**: 模糊音标志，使用逗号分隔的标志名称
   - **CommonTypo**: 常见错误（如 ng/gn）
   - **Inner**: 内部模糊音
@@ -112,6 +116,39 @@ fuzzyflags=Inner,CommonTypo
   - **Z_ZH**: z/zh 不分
   - **L_N**: l/n 不分
   - 更多标志参考 LibIME 的 PinyinFuzzyFlag 枚举
+
+### 中文模式英文补全
+
+在中文模式输入至少 4 个连续小写英文字母时，会提供最多 2 个英文候选。
+完整单个拼音音节（如 `zhi`、`shang`、`zhong`）不插入英文候选。
+前缀补全仅召回词频至少 1000 的词条，避免 `zhiv` 补出低频的 `zhivago`。
+完整单词匹配和技术词补充表不受词频门槛限制；长度和拼音音节限制仍适用。
+例如输入 `comput` 可以选择 `computer`、`computers`；输入完整的 `hello` 时，
+`hello` 优先于它的其他英文补全。通常保留中文首选，英文候选从第 2 位起插入。
+如果输入完整匹配英文单词，而中文首选仍含未转换的英文字母，则英文提到第 1 位，
+例如 `Android` 优先于“按当日哦id”。没有中文候选时，英文也从第 1 位开始。
+英文候选按完整匹配优先、词频其次排序；仅前缀匹配不会抢占中文首选。
+
+检索使用小写字母，显示和提交保留词条的大小写。独立的
+[技术词补充表](data/english-technical.txt) 收录 `Android`、`Linux`、`GitHub`，
+输入 `andro` 即可选择 `Android`；小写 `android` 也仍可选择。
+补充词继承基础词库中同名小写词的词频（没有则为零），同频时优先规范拼写。
+不会自动将普通英文单词首字母大写。补充表每行一个纯英文字母词条，
+更新后需重新安装并重启引擎。
+
+数字键、空格和鼠标均可选词，英文选中后不附加空格，也不写入中文学习词典。
+Enter 仍提交原始输入。En 模式仍然透传全部按键，不显示补全。
+光标不在输入末尾、已经部分选词或输入含拼音分隔符时，不提供英文补全。
+可设置 `englishcandidates=false` 关闭本功能，修改后重启引擎生效。
+
+英文词库随安装包提供，无需联网。数据来自 Hermit Dave 及贡献者的
+[FrequencyWords](https://github.com/hermitdave/FrequencyWords)，基于 OpenSubtitles2018，
+以 CC BY-SA 4.0 发布；详见 [来源说明](data/english-README.txt) 和
+[数据许可证](data/english-LICENSE.txt)。程序许可证不变。
+词库加载失败会在日志中记录警告，中文输入不受影响。
+开发时可用 `IBUS_LIBIME_DATA_DIR` 指定同时包含 `english-frequency.txt`
+和 `english-technical.txt` 的目录；
+该变量与指定中文词典位置的 `LIBIME_DATA_DIR` 独立。
 
 ## 故障排查
 
@@ -150,4 +187,3 @@ GPL-3.0
 
 - [LibIME 项目](https://github.com/fcitx/libime)
 - [IBus 文档](https://github.com/ibus/ibus)
-

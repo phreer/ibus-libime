@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "english_dictionary.h"
+
 class PinyinEngine {
 public:
   explicit PinyinEngine(IBusEngine *engine);
@@ -37,6 +39,7 @@ public:
   void cursorUp();
   void cursorDown();
   void selectCandidate(size_t index);
+  void selectPageCandidate(size_t index);
   void toggleInputMode();
 
 private:
@@ -44,6 +47,15 @@ private:
   static std::shared_ptr<libime::PinyinIME>
       shared_ime_; // Shared across all instances
   std::unique_ptr<libime::PinyinContext> context_;
+  static std::unique_ptr<EnglishDictionary> english_dictionary_;
+
+  struct Candidate {
+    enum class Type { Pinyin, English };
+    Type type;
+    std::string text;
+    size_t pinyin_index;
+  };
+  std::vector<Candidate> candidates_;
 
   // UI state
   size_t page_size_;
@@ -68,6 +80,7 @@ private:
   void updateModeProperty();
   void initializeIME();
   void updateUI();
+  void rebuildCandidates();
   void updatePreedit();
   void updateLookupTable();
   void commitString(const std::string &text);

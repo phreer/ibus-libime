@@ -4,6 +4,7 @@
 #include <ibus.h>
 #include <libime/core/userlanguagemodel.h>
 #include <libime/pinyin/pinyindictionary.h>
+#include <libime/pinyin/pinyinencoder.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -15,6 +16,25 @@
 
 using namespace libime;
 
+namespace {
+bool isCompletePinyinSyllable(std::string_view input) {
+  const auto syllables =
+      PinyinEncoder::stringToSyllables(input, PinyinFuzzyFlag::None);
+  for (const auto &syllable : syllables) {
+    if (syllable.first == PinyinInitial::Invalid) {
+      continue;
+    }
+    for (const auto &final : syllable.second) {
+      if (final.first != PinyinFinal::Zero &&
+          final.first != PinyinFinal::Invalid) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+} // namespace
+
 struct PinyinContextStatus {
   bool englishMode;
 };
@@ -23,6 +43,7 @@ static std::map<std::string, PinyinContextStatus> context_status_map;
 
 // Initialize static member
 std::shared_ptr<PinyinIME> PinyinEngine::shared_ime_ = nullptr;
+std::unique_ptr<EnglishDictionary> PinyinEngine::english_dictionary_;
 
 PinyinEngine::PinyinEngine(IBusEngine *engine)
     : engine_(engine), page_size_(Config::getInstance().getPageSize()),
@@ -64,6 +85,21 @@ void PinyinEngine::initializeSharedIME() {
           libime::DefaultLanguageModelResolver::instance()
               .languageModelFileForLanguage("zh_CN")));
   LOG_INFO("Shared PinyinIME created");
+
+  if (Config::getInstance().getEnglishCandidates()) {
+    const char *data_dir = std::getenv("IBUS_LIBIME_DATA_DIR");
+    const std::string path =
+        std::string(data_dir ? data_dir : IBUS_LIBIME_PKGDATADIR) +
+        "/english-frequency.txt";
+    try {
+      english_dictionary_ = std::make_unique<EnglishDictionary>(
+          path, std::string(data_dir ? data_dir : IBUS_LIBIME_PKGDATADIR) +
+                    "/english-technical.txt");
+      LOG_INFO("English dictionary loaded from {}", path);
+    } catch (const std::runtime_error &e) {
+      LOG_WARN("English completion unavailable: {}", e.what());
+    }
+  }
 
   // Load system dictionary
   std::string dict_path = getDataPath("sc.dict");
@@ -135,6 +171,7 @@ void PinyinEngine::cleanupSharedIME() {
     saveUserData();
     LOG_INFO("Cleaning up shared IME");
     shared_ime_.reset();
+    english_dictionary_.reset();
   }
 }
 
@@ -329,13 +366,10 @@ bool PinyinEngine::processInputKey(guint keyval, guint modifiers) {
 
   // Handle number selection (1-9, 0)
   if (keyval >= '0' && keyval <= '9' && context_->size() > 0) {
-    size_t index = keyval - '1' + current_page_ * page_size_;
-    if (keyval == '0') {
-      index = 9 + current_page_ * page_size_;
-    }
+    size_t index = keyval == '0' ? 9 : keyval - '1';
     LOG_DEBUG("Number key pressed: {} -> candidate index {}", keyval - '0',
               index);
-    selectCandidate(index);
+    selectPageCandidate(index);
     return TRUE;
   }
 
@@ -345,7 +379,7 @@ bool PinyinEngine::processInputKey(guint keyval, guint modifiers) {
     LOG_DEBUG(
         "Space pressed -> selecting first candidate on page {} (index {})",
         current_page_, index);
-    selectCandidate(index);
+    selectPageCandidate(0);
     return TRUE;
   }
 
@@ -434,15 +468,21 @@ bool PinyinEngine::processControlKey(guint keyval, guint modifiers) {
 }
 
 void PinyinEngine::selectCandidate(size_t index) {
-  const auto &candidates = context_->candidates();
+  const auto &candidates = candidates_;
   LOG_DEBUG("selectCandidate: index={} total_candidates={}", index,
             candidates.size());
 
   if (index < candidates.size()) {
-    std::string candidate_text = candidates[index].toString();
+    std::string candidate_text = candidates[index].text;
     LOG_INFO("Selecting candidate {}: {}", index, candidate_text);
 
-    context_->select(index);
+    if (candidates[index].type == Candidate::Type::English) {
+      commitString(candidate_text);
+      reset();
+      return;
+    }
+
+    context_->select(candidates[index].pinyin_index);
 
     if (context_->selected()) {
       std::string sentence = context_->sentence();
@@ -462,7 +502,50 @@ void PinyinEngine::selectCandidate(size_t index) {
   }
 }
 
+void PinyinEngine::selectPageCandidate(size_t index) {
+  if (index >= page_size_) {
+    LOG_WARN("Invalid page candidate index: {}", index);
+    return;
+  }
+  selectCandidate(current_page_ * page_size_ + index);
+}
+
+void PinyinEngine::rebuildCandidates() {
+  candidates_.clear();
+  const auto &pinyin = context_->candidates();
+  for (size_t i = 0; i < pinyin.size(); ++i) {
+    candidates_.push_back({Candidate::Type::Pinyin, pinyin[i].toString(), i});
+  }
+  if (!english_mode_ && english_dictionary_ && context_->selectedLength() == 0 &&
+      context_->cursor() == context_->size() &&
+      !isCompletePinyinSyllable(context_->userInput())) {
+    auto english = english_dictionary_->complete(context_->userInput());
+    size_t position = candidates_.empty() ? 0 : 1;
+    if (!candidates_.empty() && !english.empty() &&
+        EnglishDictionary::matchesWord(english.front(), context_->userInput()) &&
+        candidates_.front().text.find_first_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") !=
+            std::string::npos) {
+      position = 0;
+    }
+    for (const auto &word : english) {
+      const bool duplicate =
+          std::any_of(candidates_.begin(), candidates_.end(),
+                      [&word](const Candidate &candidate) {
+                        return candidate.text == word;
+                      });
+      if (!duplicate) {
+        candidates_.insert(candidates_.begin() + position,
+                           {Candidate::Type::English, word, 0});
+        ++position;
+      }
+    }
+  }
+}
+
 void PinyinEngine::updateUI() {
+  current_page_ = 0;
+  rebuildCandidates();
   updatePreedit();
   updateLookupTable();
 }
@@ -485,7 +568,7 @@ void PinyinEngine::updatePreedit() {
 }
 
 void PinyinEngine::updateLookupTable() {
-  const auto &candidates = context_->candidates();
+  const auto &candidates = candidates_;
 
   LOG_DEBUG("updateLookupTable: {} candidates", candidates.size());
 
@@ -496,6 +579,7 @@ void PinyinEngine::updateLookupTable() {
   }
 
   IBusLookupTable *table = ibus_lookup_table_new(page_size_, 0, TRUE, TRUE);
+  g_object_ref_sink(table);
 
   size_t start = current_page_ * page_size_;
   size_t end = std::min(start + page_size_, candidates.size());
@@ -505,8 +589,8 @@ void PinyinEngine::updateLookupTable() {
 
   for (size_t i = start; i < end; ++i) {
     const auto &candidate = candidates[i];
-    std::string text = candidate.toString();
-    LOG_DEBUG("  Candidate {}: {} (score: {})", i + 1, text, candidate.score());
+    const std::string &text = candidate.text;
+    LOG_DEBUG("  Candidate {}: {}", i + 1, text);
 
     IBusText *ibus_text = ibus_text_new_from_string(text.c_str());
     ibus_lookup_table_append_candidate(table, ibus_text);
@@ -581,6 +665,7 @@ void PinyinEngine::focusOut() {
   // Clear any pending input but keep the mode state
   if (context_->size() > 0) {
     context_->clear();
+    candidates_.clear();
     current_page_ = 0;
     ibus_engine_hide_preedit_text(engine_);
     ibus_engine_hide_lookup_table(engine_);
@@ -592,6 +677,7 @@ void PinyinEngine::focusOut() {
 void PinyinEngine::reset() {
   LOG_DEBUG("Reset called");
   context_->clear();
+  candidates_.clear();
   current_page_ = 0;
   ibus_engine_hide_preedit_text(engine_);
   ibus_engine_hide_lookup_table(engine_);
@@ -616,7 +702,7 @@ void PinyinEngine::pageUp() {
 }
 
 void PinyinEngine::pageDown() {
-  const auto &candidates = context_->candidates();
+  const auto &candidates = candidates_;
   size_t max_page = (candidates.size() + page_size_ - 1) / page_size_;
 
   if (current_page_ + 1 < max_page) {
@@ -656,6 +742,7 @@ void PinyinEngine::initProperties() {
                                  TRUE, // sensitive
                                  TRUE, // visible
                                  PROP_STATE_UNCHECKED, nullptr);
+  g_object_ref_sink(mode_prop_);
 
   ibus_prop_list_append(prop_list_, mode_prop_);
 

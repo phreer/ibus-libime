@@ -85,6 +85,19 @@ void Config::loadConfig() {
     }
     if (error) {
       g_error_free(error);
+      error = nullptr;
+    }
+
+    gboolean englishCandidates =
+        g_key_file_get_boolean(keyFile_, "general", "englishcandidates", &error);
+    if (!error) {
+      englishCandidates_ = englishCandidates;
+    } else {
+      if (!g_error_matches(error, G_KEY_FILE_ERROR,
+                           G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+        g_warning("Invalid englishcandidates setting: %s", error->message);
+      }
+      g_error_free(error);
     }
   } else {
     // Failed to load (file might not exist), ignore the error
@@ -165,4 +178,3 @@ int Config::parseFuzzyFlagsString(const char *flagsStr) {
 
   return result;
 }
-

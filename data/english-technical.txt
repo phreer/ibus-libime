@@ -1,0 +1,7 @@
+# Canonical technical names maintained by ibus-libime.
+# One ASCII alphabetic word per line, preserving display/commit casing.
+# Inherit frequency from the base word; absent words have weight zero.
+# Prefer these spellings on equal frequency, retaining lowercase variants.
+Android
+Linux
+GitHub

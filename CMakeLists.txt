@@ -37,6 +37,7 @@ set(SOURCES
     src/ibus_engine.cpp
     src/pinyin_engine.cpp
     src/configs.cpp
+    src/english_dictionary.cpp
 )
 
 # Create executable
@@ -66,3 +67,25 @@ configure_file(
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libime.xml
     DESTINATION ${CMAKE_INSTALL_DATADIR}/ibus/component
 )
+
+install(FILES data/english-frequency.txt data/english-README.txt
+              data/english-LICENSE.txt data/english-technical.txt
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/ibus-libime)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(test-english-dictionary
+        tests/test_english_dictionary.cpp src/english_dictionary.cpp)
+    target_link_libraries(test-english-dictionary ${GLIB2_LIBRARIES})
+    add_test(NAME english-dictionary COMMAND test-english-dictionary
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/english-frequency.txt)
+    add_executable(test-pinyin-english tests/test_pinyin_english.cpp
+        src/pinyin_engine.cpp src/configs.cpp src/english_dictionary.cpp)
+    target_link_libraries(test-pinyin-english
+        ${IBUS_LIBRARIES} ${GLIB2_LIBRARIES} ${GLIBMM_LIBRARIES}
+        LibIME::Core LibIME::Pinyin)
+    foreach(mode enabled disabled missing)
+        add_test(NAME pinyin-english-${mode} COMMAND test-pinyin-english
+            ${CMAKE_CURRENT_SOURCE_DIR}/data ${mode})
+    endforeach()
+endif()

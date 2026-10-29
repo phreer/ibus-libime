@@ -24,6 +24,7 @@ public:
 
   // Get fuzzy flags as integer
   int getFuzzyFlags() const;
+  bool getEnglishCandidates() const { return englishCandidates_; }
 
   // Get config file path
   const std::string &getConfigPath() const { return configPath_; }
@@ -42,6 +43,7 @@ private:
   int nbest_;
   int pageSize_;
   int fuzzyFlags_;
+  bool englishCandidates_ = true;
 
   Config(const Config &) = delete;
   Config &operator=(const Config &) = delete;
