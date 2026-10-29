@@ -50,10 +50,11 @@ private:
   static std::unique_ptr<EnglishDictionary> english_dictionary_;
 
   struct Candidate {
-    enum class Type { Pinyin, English };
+    enum class Type { Pinyin, English, Raw };
     Type type;
     std::string text;
     size_t pinyin_index;
+    size_t prefix_end = 0;
   };
   std::vector<Candidate> candidates_;
 

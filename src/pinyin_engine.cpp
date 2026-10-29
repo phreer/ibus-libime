@@ -482,13 +482,38 @@ void PinyinEngine::selectCandidate(size_t index) {
       return;
     }
 
-    context_->select(candidates[index].pinyin_index);
+    const bool raw = candidates[index].type == Candidate::Type::Raw;
+    if (raw) {
+      context_->selectCustom(context_->size() - context_->selectedLength(),
+                             candidate_text);
+    } else if (candidates[index].prefix_end != 0) {
+      const size_t cursor = context_->cursor();
+      context_->setCursor(candidates[index].prefix_end);
+      const auto &prefixCandidates = context_->candidatesToCursor();
+      auto match = std::find_if(
+          prefixCandidates.begin(), prefixCandidates.end(),
+          [&candidate_text](const auto &candidate) {
+            return candidate.toString() == candidate_text;
+          });
+      if (match == prefixCandidates.end()) {
+        LOG_ERROR("Cannot select pinyin prefix candidate: {}", candidate_text);
+        context_->setCursor(cursor);
+        return;
+      }
+      context_->selectCandidatesToCursor(
+          std::distance(prefixCandidates.begin(), match));
+      context_->setCursor(context_->size());
+    } else {
+      context_->select(candidates[index].pinyin_index);
+    }
 
     if (context_->selected()) {
       std::string sentence = context_->sentence();
       LOG_INFO("Committing sentence: {}", sentence);
-      context_->learn(); // must be called before context_->clear()
-      LOG_DEBUG("Learning completed");
+      if (!raw) {
+        context_->learn(); // must be called before context_->clear()
+        LOG_DEBUG("Learning completed");
+      }
       commitString(sentence);
       reset();
     } else {
@@ -514,20 +539,42 @@ void PinyinEngine::rebuildCandidates() {
   candidates_.clear();
   const auto &pinyin = context_->candidates();
   for (size_t i = 0; i < pinyin.size(); ++i) {
-    candidates_.push_back({Candidate::Type::Pinyin, pinyin[i].toString(), i});
+    std::string text;
+    size_t prefixEnd = 0;
+    bool truncated = false;
+    for (const auto *node : pinyin[i].sentence()) {
+      if (node->word().find_first_of(
+              "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") !=
+          std::string::npos) {
+        truncated = true;
+        break;
+      }
+      text += node->word();
+      prefixEnd = context_->selectedLength() + node->to()->index();
+    }
+    if (text.empty()) {
+      continue;
+    }
+    if (std::any_of(candidates_.begin(), candidates_.end(),
+                    [&text](const Candidate &candidate) {
+                      return candidate.text == text;
+                    })) {
+      continue;
+    }
+    candidates_.push_back(
+        {Candidate::Type::Pinyin, std::move(text), i,
+         truncated ? prefixEnd : 0});
   }
   if (!english_mode_ && english_dictionary_ && context_->selectedLength() == 0 &&
       context_->cursor() == context_->size() &&
       !isCompletePinyinSyllable(context_->userInput())) {
     auto english = english_dictionary_->complete(context_->userInput());
-    size_t position = candidates_.empty() ? 0 : 1;
-    if (!candidates_.empty() && !english.empty() &&
-        EnglishDictionary::matchesWord(english.front(), context_->userInput()) &&
-        candidates_.front().text.find_first_of(
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") !=
-            std::string::npos) {
-      position = 0;
-    }
+    const bool exactEnglish =
+        !english.empty() &&
+        EnglishDictionary::matchesWord(english.front(), context_->userInput());
+    const bool promoteEnglish = exactEnglish && !candidates_.empty() &&
+                                candidates_.front().prefix_end != 0;
+    size_t position = candidates_.empty() || promoteEnglish ? 0 : 1;
     for (const auto &word : english) {
       const bool duplicate =
           std::any_of(candidates_.begin(), candidates_.end(),
@@ -540,6 +587,11 @@ void PinyinEngine::rebuildCandidates() {
         ++position;
       }
     }
+  }
+  if (candidates_.empty() && context_->selectedLength() < context_->size()) {
+    candidates_.push_back(
+        {Candidate::Type::Raw,
+         context_->userInput().substr(context_->selectedLength()), 0});
   }
 }
 

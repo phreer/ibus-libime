@@ -20,6 +20,8 @@ struct Output {
   std::mutex mutex;
   std::vector<std::string> candidates;
   std::vector<std::string> commits;
+  std::string preedit;
+  bool lookupVisible = false;
 
   static GDBusMessage *filter(GDBusConnection *, GDBusMessage *message,
                               gboolean incoming, gpointer data) {
@@ -32,14 +34,19 @@ struct Output {
     std::lock_guard lock(output.mutex);
     if (g_strcmp0(member, "HideLookupTable") == 0) {
       output.candidates.clear();
+      output.lookupVisible = false;
     } else if (g_strcmp0(member, "UpdateLookupTable") == 0 ||
-               g_strcmp0(member, "CommitText") == 0) {
+               g_strcmp0(member, "CommitText") == 0 ||
+               g_strcmp0(member, "UpdatePreeditText") == 0) {
       GVariant *body = g_dbus_message_get_body(message);
       GVariant *value = g_variant_get_child_value(body, 0);
       auto *object = ibus_serializable_deserialize(value);
       require(object != nullptr, "Cannot deserialize IBus output");
       g_object_ref_sink(object);
       if (IBUS_IS_LOOKUP_TABLE(object)) {
+        gboolean visible;
+        g_variant_get_child(body, 1, "b", &visible);
+        output.lookupVisible = visible;
         output.candidates.clear();
         auto *table = IBUS_LOOKUP_TABLE(object);
         for (guint i = 0; i < ibus_lookup_table_get_number_of_candidates(table);
@@ -48,7 +55,11 @@ struct Output {
               ibus_lookup_table_get_candidate(table, i)->text);
         }
       } else if (IBUS_IS_TEXT(object)) {
-        output.commits.emplace_back(IBUS_TEXT(object)->text);
+        if (g_strcmp0(member, "UpdatePreeditText") == 0) {
+          output.preedit = IBUS_TEXT(object)->text;
+        } else {
+          output.commits.emplace_back(IBUS_TEXT(object)->text);
+        }
       }
       g_object_unref(object);
       g_variant_unref(value);
@@ -192,6 +203,117 @@ int main(int argc, char **argv) {
               "Short input, rare prefixes and full pinyin syllables must not "
               "insert English candidates");
       fixture.key(IBUS_KEY_Escape);
+    }
+
+    for (const auto *input : {"github", "android"}) {
+      fixture.type(input);
+      bool foundCanonical = false;
+      std::vector<std::string> previousPage;
+      while (true) {
+        const auto page = fixture.candidates();
+        if (page == previousPage) {
+          break;
+        }
+        for (const auto &word : page) {
+          const bool hasLetters =
+              word.find_first_of("abcdefghijklmnopqrstuvwxyz"
+                                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ") !=
+              std::string::npos;
+          require(!hasLetters || EnglishDictionary::matchesWord(word, input),
+                  "Exact English must hide unconverted pinyin on every page");
+          foundCanonical =
+              foundCanonical || word == "GitHub" || word == "Android";
+        }
+        previousPage = page;
+        fixture.key(IBUS_KEY_Page_Down);
+      }
+      require(foundCanonical,
+              "Canonical English candidate must remain visible");
+      fixture.key(IBUS_KEY_Escape);
+    }
+
+    fixture.type("github");
+    fixture.key(' ');
+    require(fixture.committed() == "GitHub",
+            "Space must commit GitHub after filtering");
+    fixture.type("github");
+    fixture.engine->selectPageCandidate(0);
+    require(fixture.committed() == "GitHub",
+            "Page selection must commit GitHub after filtering");
+    fixture.type("github");
+    fixture.key('1');
+    require(fixture.committed() == "GitHub",
+            "Number selection must commit GitHub after filtering");
+    fixture.type("githubx");
+    const auto unmatched = fixture.candidates();
+    require(std::none_of(unmatched.begin(), unmatched.end(),
+                         [](const std::string &word) {
+                           return word.find_first_of(
+                                      "abcdefghijklmnopqrstuvwxyz"
+                                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ") !=
+                                  std::string::npos;
+                         }),
+            "Unmatched input must not append raw letters to pinyin candidates");
+    fixture.key(IBUS_KEY_Return);
+    require(fixture.committed() == "githubx",
+            "Enter must still commit unmatched raw input");
+
+    for (const auto *selection : {"space", "number", "page"}) {
+      fixture.type("git");
+      const auto prefixes = fixture.candidates();
+      require(!prefixes.empty(), "git must offer converted g prefixes");
+      for (const auto &word : prefixes) {
+        require(word.find_first_of(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") ==
+                    std::string::npos,
+                "git candidates must not contain the unconverted it suffix");
+      }
+      size_t commitsBeforeSelection;
+      {
+        std::lock_guard lock(fixture.output.mutex);
+        commitsBeforeSelection = fixture.output.commits.size();
+      }
+      if (std::string(selection) == "space") {
+        fixture.key(' ');
+      } else if (std::string(selection) == "number") {
+        fixture.key('1');
+      } else {
+        fixture.engine->selectPageCandidate(0);
+      }
+      fixture.flush();
+      {
+        std::lock_guard lock(fixture.output.mutex);
+        require(
+            fixture.output.preedit.starts_with(prefixes.front()) &&
+                fixture.output.preedit.ends_with("it"),
+            "Selecting g must preserve it in preedit after selected Chinese");
+        require(
+            fixture.output.commits.size() == commitsBeforeSelection,
+            "Selecting a prefix must not prematurely commit the composition");
+      }
+      require(fixture.candidates() == std::vector<std::string>{"it"},
+              "Unconverted remainder must stay selectable in the lookup table");
+      {
+        std::lock_guard lock(fixture.output.mutex);
+        require(fixture.output.lookupVisible,
+                "The lookup table must remain visible for the raw remainder");
+      }
+      fixture.key(IBUS_KEY_BackSpace);
+      fixture.key('t');
+      require(fixture.candidates() == std::vector<std::string>{"it"},
+              "Editing the remainder must preserve its raw candidate");
+      if (std::string(selection) == "space") {
+        fixture.key(' ');
+      } else if (std::string(selection) == "number") {
+        fixture.key('1');
+      } else {
+        fixture.engine->selectPageCandidate(0);
+      }
+      require(
+          fixture.committed() == prefixes.front() + "it",
+          "Selecting the raw remainder must commit selected Chinese and it");
+      require(fixture.candidates().empty(),
+              "Completing the remainder must clear the lookup table");
     }
 
     fixture.type("android");
