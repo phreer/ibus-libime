@@ -795,7 +795,7 @@ void PinyinEngine::initProperties() {
   g_object_ref_sink(prop_list_);
 
   // Create mode property - use PROP_TYPE_NORMAL for status bar display
-  IBusText *label = ibus_text_new_from_string("中");
+  IBusText *label = ibus_text_new_from_string("输入模式：中");
   IBusText *tooltip = ibus_text_new_from_string("切换中英文 (Shift)");
 
   mode_prop_ = ibus_property_new("InputMode", PROP_TYPE_NORMAL, label,
@@ -819,7 +819,7 @@ void PinyinEngine::updateModeProperty() {
     return;
 
   // Update label based on mode
-  const char *label = english_mode_ ? "En" : "中";
+  const char *label = english_mode_ ? "输入模式：En" : "输入模式：中";
 
   IBusText *label_text = ibus_text_new_from_string(label);
   ibus_property_set_label(mode_prop_, label_text);

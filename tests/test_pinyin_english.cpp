@@ -176,7 +176,8 @@ public:
   void requireMode(const char *label) {
     flush();
     std::lock_guard lock(output.mutex);
-    require(output.modeLabel == label, "Tray property must match input mode");
+    require(output.modeLabel == std::string("输入模式：") + label,
+            "Tray property must identify and match input mode");
   }
 
   std::filesystem::path directory;
