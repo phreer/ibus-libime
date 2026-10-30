@@ -1,5 +1,3 @@
-%global version %(cat %{_sourcedir}/VERSION 2>/dev/null || echo 0.1.0)
-
 Name:           ibus-libime
 Version:        0.1.1
 Release:        1%{?dist}
