@@ -1,5 +1,5 @@
 Name:           ibus-libime
-Version:        0.1.1
+Version:        0.1.2
 Release:        1%{?dist}
 Summary:        An ibus front-end for libime
 
@@ -50,6 +50,27 @@ ibus-libime is an ibus front-end for libime.
 
 
 %changelog
+* Fri Oct 30 2026 Weifeng Liu <weifeng.liu@intel.com> 0.1.2-1
+- build: synchronize version metadata with Tito (weifeng.liu@intel.com)
+- Bump to version 0.1.2 (weifeng.liu@intel.com)
+- Organize preferences into tabs and add friendly fuzzy selections
+  (weifeng.liu@intel.com)
+- Move preferences descriptions into option tooltips (weifeng.liu@intel.com)
+- Add GTK preferences with live settings and tray launcher
+  (weifeng.liu@intel.com)
+- Fix user data persistence and orderly shutdown (weifeng.liu@intel.com)
+- Add input history and dictionary learning settings (weifeng.liu@intel.com)
+- Record committed Chinese input history for personal dictionaries
+  (weifeng.liu@intel.com)
+- Clarify tray input mode labels (weifeng.liu@intel.com)
+- Fix tray input mode switching across panel focus changes
+  (weifeng.liu@intel.com)
+- Fix partial pinyin candidates and preserve selectable raw remainders
+  (weifeng.liu@intel.com)
+- Add English prefix candidates in Chinese mode (weifeng.liu@intel.com)
+- Fix delayed input-mode callback lifetime (weifeng.liu@intel.com)
+- Save user history (weifeng.liu@intel.com)
+
 * Wed Feb 04 2026 Weifeng Liu <weifeng.liu@intel.com> 0.1.1-1
 - Bump to version 0.1.1 (weifeng.liu@intel.com)
 - Add .gitignore (weifeng.liu@intel.com)
