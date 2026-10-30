@@ -83,6 +83,7 @@ void PinyinEngine::initializeSharedIME() {
   }
 
   LOG_INFO("Initializing shared LibIME components");
+  Config::getInstance().watch();
 
   // Initialize LibIME components
   shared_ime_ = std::make_shared<PinyinIME>(
@@ -318,8 +319,27 @@ void PinyinEngine::initializeIME() {
   LOG_INFO("PinyinContext created for this instance");
 }
 
+void PinyinEngine::applyInputSettings() {
+  const auto &config = Config::getInstance();
+  page_size_ = config.getPageSize();
+  const size_t nbest = config.getNBest();
+  if (shared_ime_->nbest() != nbest) {
+    shared_ime_->setNBest(nbest);
+  }
+  const auto flags = config.getFuzzyFlags() == 0
+                         ? PinyinFuzzyFlags{PinyinFuzzyFlag::Inner,
+                                            PinyinFuzzyFlag::CommonTypo}
+                         : static_cast<PinyinFuzzyFlags>(config.getFuzzyFlags());
+  if (shared_ime_->fuzzyFlags() != flags) {
+    shared_ime_->setFuzzyFlags(flags);
+  }
+}
+
 bool PinyinEngine::processKeyEvent(guint keyval, guint keycode,
                                    guint modifiers) {
+  if (context_->size() == 0) {
+    applyInputSettings();
+  }
   LOG_DEBUG("processKeyEvent: keyval=0x{:x} keycode={} modifiers=0x{:x}",
             keyval, keycode, modifiers);
 
@@ -876,6 +896,12 @@ void PinyinEngine::initProperties() {
   g_object_ref_sink(mode_prop_);
 
   ibus_prop_list_append(prop_list_, mode_prop_);
+
+  IBusProperty *setup = ibus_property_new(
+      "Setup", PROP_TYPE_NORMAL, ibus_text_new_from_string("设置…"),
+      "preferences-system", ibus_text_new_from_string("打开 LibIME 拼音设置"),
+      TRUE, TRUE, PROP_STATE_UNCHECKED, nullptr);
+  ibus_prop_list_append(prop_list_, setup);
 
   // Register properties with engine
   ibus_engine_register_properties(engine_, prop_list_);

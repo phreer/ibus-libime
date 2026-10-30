@@ -86,6 +86,7 @@ private:
   void initProperties();
   void updateModeProperty();
   void initializeIME();
+  void applyInputSettings();
   void updateUI();
   void rebuildCandidates();
   void updatePreedit();

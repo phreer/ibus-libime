@@ -21,6 +21,7 @@
             <description>Chinese Pinyin Input Method powered by LibIME</description>
             <rank>99</rank>
             <has-focus-id>true</has-focus-id>
+            <setup>@CMAKE_INSTALL_FULL_LIBEXECDIR@/ibus-setup-libime</setup>
         </engine>
     </engines>
 </component>

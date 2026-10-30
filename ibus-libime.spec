@@ -14,11 +14,13 @@ BuildRequires:  cmake
 BuildRequires:  ibus-devel
 BuildRequires:  libime-devel
 BuildRequires:  glibmm2.4-devel
+BuildRequires:  gtk3-devel
 BuildRequires:  fcitx5-devel
 Requires:       ibus
 Requires:       libime
 Requires:       libime-data
 Requires:       glibmm2.4
+Requires:       gtk3
 Requires:       fcitx5-libs
 
 %description
@@ -41,6 +43,8 @@ ibus-libime is an ibus front-end for libime.
 %files
 %{_datadir}/ibus/component/libime.xml
 %{_libexecdir}/ibus-engine-libime
+%{_libexecdir}/ibus-setup-libime
+%{_datadir}/applications/ibus-setup-libime.desktop
 %{_datadir}/ibus-libime/
 %license LICENSE
 %doc README.md

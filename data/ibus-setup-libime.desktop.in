@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LibIME Pinyin Preferences
+Name[zh_CN]=LibIME 拼音设置
+Comment=Configure the LibIME Pinyin input method
+Comment[zh_CN]=配置 LibIME 拼音输入法
+Exec=@CMAKE_INSTALL_FULL_LIBEXECDIR@/ibus-setup-libime
+Icon=ibus-pinyin
+Terminal=false
+Categories=Settings;
+StartupNotify=true

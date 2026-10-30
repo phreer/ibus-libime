@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "logger.h"
+#include "config.h"
 #include "pinyin_engine.h"
 
 // Static members
@@ -179,6 +180,21 @@ static void ibus_libime_engine_property_activate(IBusEngine *engine,
   if (g_strcmp0(prop_name, "InputMode") == 0) {
     // Toggle input mode when user clicks the property
     libime_engine->pinyin_engine->toggleInputMode();
+  } else if (g_strcmp0(prop_name, "Setup") == 0) {
+    const gchar *argv[] = {IBUS_LIBIME_SETUP, nullptr};
+    GError *error = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(argv, G_SUBPROCESS_FLAGS_NONE, &error);
+    if (!process) {
+      LOG_ERROR("Failed to open settings ({}): {}", IBUS_LIBIME_SETUP,
+                error->message);
+      ibus_engine_update_auxiliary_text(
+          engine, ibus_text_new_from_string("无法打开设置，请检查设置程序是否已安装。"),
+          TRUE);
+      g_error_free(error);
+      return;
+    }
+    g_object_unref(process);
   }
 }
 

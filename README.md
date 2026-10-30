@@ -6,6 +6,9 @@
 
 ### 从源码编译
 
+构建依赖包括 GTK 3 开发包（Fedora：`gtk3-devel`，Debian/Ubuntu：
+`libgtk-3-dev`）和 GLib 2.66 或更新版本；GTK 仅用于设置程序。
+
 ```bash
 # 创建构建目录
 mkdir builddir
@@ -76,9 +79,30 @@ ibus restart
 
 ## 配置
 
+### 图形设置
+
+安装后可在托盘输入法菜单中点击 **设置…**，在应用列表中打开
+**LibIME 拼音设置**，或在 IBus 输入法首选项中
+选择 LibIME Pinyin 的设置按钮。也可直接运行安装在 libexec 目录下的
+`ibus-setup-libime`（通常为 `/usr/libexec/ibus-setup-libime`）。
+
+GTK 3 设置窗口包含候选数量、每页候选数量、模糊音、英文补全、输入历史、
+词库学习和日志级别。点击“保存”写入当前用户的
+`$XDG_CONFIG_HOME/ibus-libime.ini`（默认 `~/.config/ibus-libime.ini`），
+保留其他配置项和注释；关闭窗口不会保存未提交的修改。
+
+- **输入历史、词库学习**：保存后直接生效，不删除已有历史和用户词库。
+- **候选数量、分页、模糊音**：从下一次输入开始生效，不清除当前预编辑内容。
+- **英文补全、日志级别**：修改后需重启输入法生效，窗口中会明确标注。
+  日志级别仍受 `IBUS_LIBIME_LOG_LEVEL` 环境变量优先覆盖。
+
+引擎也会监视手动修改的 INI 文件，按相同规则应用配置。
+已有运行中的旧版本引擎需升级并重启一次，才能支持这些动态设置。
+
 ### 引擎配置
 
-在 `$HOME/.config/ibus-libime.ini` 中可以配置以下选项：
+在 `$XDG_CONFIG_HOME/ibus-libime.ini`（默认 `~/.config/ibus-libime.ini`）
+中可以配置以下选项：
 
 ```ini
 [general]
@@ -111,7 +135,7 @@ fuzzyflags=Inner,CommonTypo
 支持的配置项：
 - **loglevel**: 日志级别，可选 DEBUG、INFO、WARN、ERROR
 - **nbest**: 生成的候选词数量，影响选词准确度
-- **pagesize**: 每页显示的候选词数量，建议设置为 9 或 10
+- **pagesize**: 每页显示的候选词数量，范围为 1–16，建议设置为 9 或 10
 - **englishcandidates**: 中文模式下的英文前缀补全，默认 `true`；设为 `false` 关闭
 - **recordinputhistory**: 是否追加记录确认提交的中文输入历史，默认 `true`；
   设为 `false` 后不再写入 `input-history.tsv`

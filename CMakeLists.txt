@@ -13,8 +13,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Find required packages
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(IBUS REQUIRED ibus-1.0)
-pkg_check_modules(GLIB2 REQUIRED glib-2.0)
+pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.66 gio-2.0)
 pkg_check_modules(GLIBMM REQUIRED glibmm-2.4)
+pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 
 # Find LibIME
 find_package(LibIMECore REQUIRED)
@@ -52,10 +53,18 @@ target_link_libraries(ibus-engine-libime
     LibIME::Pinyin
 )
 
+add_executable(ibus-setup-libime src/setup.cpp src/configs.cpp)
+target_link_libraries(ibus-setup-libime PkgConfig::GTK3)
+
 # Install
-install(TARGETS ibus-engine-libime
+install(TARGETS ibus-engine-libime ibus-setup-libime
     RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}
 )
+
+configure_file(data/ibus-setup-libime.desktop.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ibus-setup-libime.desktop @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ibus-setup-libime.desktop
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 
 # Install IBus component file
 configure_file(
@@ -74,6 +83,9 @@ install(FILES data/english-frequency.txt data/english-README.txt
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(test-configs tests/test_configs.cpp src/configs.cpp)
+    target_link_libraries(test-configs ${GLIB2_LIBRARIES})
+    add_test(NAME configs COMMAND test-configs)
     add_executable(test-english-dictionary
         tests/test_english_dictionary.cpp src/english_dictionary.cpp)
     target_link_libraries(test-english-dictionary ${GLIB2_LIBRARIES})
@@ -85,7 +97,7 @@ if(BUILD_TESTING)
     target_link_libraries(test-pinyin-english
         ${IBUS_LIBRARIES} ${GLIB2_LIBRARIES} ${GLIBMM_LIBRARIES}
         LibIME::Core LibIME::Pinyin)
-    foreach(mode enabled disabled missing history-disabled learning-disabled)
+    foreach(mode enabled disabled missing history-disabled learning-disabled runtime-settings)
         add_test(NAME pinyin-english-${mode} COMMAND test-pinyin-english
             ${CMAKE_CURRENT_SOURCE_DIR}/data ${mode})
     endforeach()

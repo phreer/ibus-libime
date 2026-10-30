@@ -22,6 +22,11 @@ struct PinyinEngineTestAccess {
   static guint idle() { return PinyinEngine::save_idle_id_; }
   static void save() { PinyinEngine::saveUserData(); }
   static void scheduleSave() { PinyinEngine::onSaveTimer(nullptr); }
+  static size_t pageSize(const PinyinEngine &engine) {
+    return engine.page_size_;
+  }
+  static size_t nbest() { return PinyinEngine::shared_ime_->nbest(); }
+  static auto fuzzyFlags() { return PinyinEngine::shared_ime_->fuzzyFlags(); }
 
   static std::pair<std::string, std::string> snapshot() {
     std::ostringstream dict;
@@ -48,6 +53,7 @@ struct Output {
   std::string preedit;
   bool lookupVisible = false;
   std::string modeLabel;
+  bool setupVisible = false;
 
   static GDBusMessage *filter(GDBusConnection *, GDBusMessage *message,
                               gboolean incoming, gpointer data) {
@@ -71,6 +77,18 @@ struct Output {
       auto *object = ibus_serializable_deserialize(value);
       require(object != nullptr, "Cannot deserialize IBus output");
       g_object_ref_sink(object);
+      if (IBUS_IS_PROP_LIST(object)) {
+        auto *properties = IBUS_PROP_LIST(object);
+        for (guint i = 0; auto *property = ibus_prop_list_get(properties, i);
+             ++i) {
+          if (g_strcmp0(ibus_property_get_key(property), "Setup") == 0) {
+            output.setupVisible =
+                ibus_property_get_visible(property) &&
+                ibus_property_get_sensitive(property) &&
+                g_strcmp0(ibus_property_get_label(property)->text, "设置…") == 0;
+          }
+        }
+      }
       if (IBUS_IS_PROPERTY(object) || IBUS_IS_PROP_LIST(object)) {
         auto *property = IBUS_IS_PROPERTY(object)
                              ? IBUS_PROPERTY(object)
@@ -393,7 +411,58 @@ int main(int argc, char **argv) {
     g_log_set_always_fatal(static_cast<GLogLevelFlags>(
         G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING));
     Fixture fixture(argv[1], argv[2]);
+    fixture.flush();
+    {
+      std::lock_guard lock(fixture.output.mutex);
+      require(fixture.output.setupVisible,
+              "Tray menu must expose an enabled settings action");
+    }
     const std::string mode = argv[2];
+    if (mode == "runtime-settings") {
+      fixture.type("nihao");
+      auto &config = Config::getInstance();
+      auto settings = config.getSettings();
+      settings.recordInputHistory = false;
+      settings.learnUserDictionary = false;
+      settings.pageSize = 5;
+      settings.nbest = 6;
+      settings.fuzzyFlags = "EN_ENG";
+      GError *error = nullptr;
+      require(config.saveSettings(settings, &error),
+              error ? error->message : "Cannot save live settings");
+      require(PinyinEngineTestAccess::pageSize(*fixture.engine) == 2 &&
+                  PinyinEngineTestAccess::nbest() == 3,
+              "Changing settings must not disturb pending input");
+      const auto before = PinyinEngineTestAccess::snapshot();
+      fixture.key(' ');
+      require(fixture.committed() == "你好",
+              "Pending input must still commit after saving settings");
+      require(before == PinyinEngineTestAccess::snapshot() &&
+                  !PinyinEngineTestAccess::dirty(),
+              "Disabling learning must take effect on the pending commit");
+      require(!std::filesystem::exists(fixture.directory / "ibus-libime" /
+                                      "input-history.tsv"),
+              "Disabling history must take effect on the pending commit");
+      fixture.type("nihao");
+      require(PinyinEngineTestAccess::pageSize(*fixture.engine) == 5 &&
+                  PinyinEngineTestAccess::nbest() == 6 &&
+                  PinyinEngineTestAccess::fuzzyFlags() ==
+                      libime::PinyinFuzzyFlags{libime::PinyinFuzzyFlag::EN_ENG},
+              "Candidate settings must apply to the next composition");
+      fixture.key(IBUS_KEY_Escape);
+      settings.learnUserDictionary = true;
+      settings.recordInputHistory = true;
+      require(config.saveSettings(settings, &error),
+              error ? error->message : "Cannot re-enable learning");
+      fixture.type("nihao");
+      fixture.key(' ');
+      require(PinyinEngineTestAccess::dirty() &&
+                  std::filesystem::exists(fixture.directory / "ibus-libime" /
+                                          "input-history.tsv"),
+              "Re-enabling learning and history must take effect immediately");
+      std::cout << "Live settings integration tests passed\n";
+      return 0;
+    }
     if (mode == "persistence" || mode.starts_with("shutdown-")) {
       if (mode == "persistence") {
         testPersistence(fixture);
