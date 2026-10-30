@@ -12,6 +12,7 @@ constexpr auto configFileFlags = static_cast<GKeyFileFlags>(
     G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS);
 
 const std::map<std::string, int> fuzzyFlagMap = {
+    {"None", 0},
     {"CommonTypo", 1 << 0},    {"V_U", 1 << 1},
     {"AN_ANG", 1 << 2},        {"EN_ENG", 1 << 3},
     {"IAN_IANG", 1 << 4},      {"IN_ING", 1 << 5},
@@ -227,7 +228,8 @@ bool Config::saveSettings(const Settings &settings, GError **error) {
   bool validFlags = true;
   for (gchar **token = tokens; *token; ++token) {
     const char *name = g_strstrip(*token);
-    if (*name && !fuzzyFlagMap.contains(name)) {
+    if ((*name && !fuzzyFlagMap.contains(name)) ||
+        (std::string(name) == "None" && g_strv_length(tokens) != 1)) {
       validFlags = false;
     }
   }
@@ -305,6 +307,14 @@ int Config::getNBest() const { return nbest_; }
 int Config::getPageSize() const { return pageSize_; }
 
 int Config::getFuzzyFlags() const { return fuzzyFlags_; }
+
+int Config::getEffectiveFuzzyFlags() const {
+  gchar *flags =
+      g_key_file_get_string(keyFile_, "general", "fuzzyflags", nullptr);
+  const bool disabled = flags && std::string(g_strstrip(flags)) == "None";
+  g_free(flags);
+  return disabled ? 0 : (fuzzyFlags_ == 0 ? (1 << 14) | 1 : fuzzyFlags_);
+}
 
 int Config::parseFuzzyFlagsString(const char *flagsStr) {
   if (!flagsStr || flagsStr[0] == '\0') {

@@ -460,6 +460,23 @@ int main(int argc, char **argv) {
                   std::filesystem::exists(fixture.directory / "ibus-libime" /
                                           "input-history.tsv"),
               "Re-enabling learning and history must take effect immediately");
+      settings.fuzzyFlags = "None";
+      require(config.saveSettings(settings, &error),
+              error ? error->message : "Cannot disable fuzzy rules");
+      fixture.type("nihao");
+      require(PinyinEngineTestAccess::fuzzyFlags() ==
+                  libime::PinyinFuzzyFlags{},
+              "Clearing all fuzzy selections must disable fuzzy matching");
+      fixture.key(IBUS_KEY_Escape);
+      settings.fuzzyFlags.clear();
+      require(config.saveSettings(settings, &error),
+              error ? error->message : "Cannot restore recommended fuzzy rules");
+      fixture.type("nihao");
+      require(PinyinEngineTestAccess::fuzzyFlags() ==
+                  libime::PinyinFuzzyFlags{libime::PinyinFuzzyFlag::Inner,
+                                          libime::PinyinFuzzyFlag::CommonTypo},
+              "Recommended fuzzy rules must take effect on the next input");
+      fixture.key(IBUS_KEY_Escape);
       std::cout << "Live settings integration tests passed\n";
       return 0;
     }

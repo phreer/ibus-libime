@@ -157,16 +157,8 @@ void PinyinEngine::initializeSharedIME() {
   int nbest = Config::getInstance().getNBest();
   shared_ime_->setNBest(nbest);
 
-  int fuzzyFlagsValue = Config::getInstance().getFuzzyFlags();
-  PinyinFuzzyFlags flags;
-  if (fuzzyFlagsValue == 0) {
-    // Default: Inner + CommonTypo
-    flags =
-        PinyinFuzzyFlags{PinyinFuzzyFlag::Inner, PinyinFuzzyFlag::CommonTypo};
-  } else {
-    // Use configured flags
-    flags = static_cast<PinyinFuzzyFlags>(fuzzyFlagsValue);
-  }
+  int fuzzyFlagsValue = Config::getInstance().getEffectiveFuzzyFlags();
+  const auto flags = static_cast<PinyinFuzzyFlags>(fuzzyFlagsValue);
   shared_ime_->setFuzzyFlags(flags);
   LOG_INFO("Shared IME configured: NBest={}, FuzzyFlags={}", nbest,
            fuzzyFlagsValue);
@@ -326,10 +318,8 @@ void PinyinEngine::applyInputSettings() {
   if (shared_ime_->nbest() != nbest) {
     shared_ime_->setNBest(nbest);
   }
-  const auto flags = config.getFuzzyFlags() == 0
-                         ? PinyinFuzzyFlags{PinyinFuzzyFlag::Inner,
-                                            PinyinFuzzyFlag::CommonTypo}
-                         : static_cast<PinyinFuzzyFlags>(config.getFuzzyFlags());
+  const auto flags =
+      static_cast<PinyinFuzzyFlags>(config.getEffectiveFuzzyFlags());
   if (shared_ime_->fuzzyFlags() != flags) {
     shared_ime_->setFuzzyFlags(flags);
   }

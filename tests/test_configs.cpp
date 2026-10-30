@@ -98,8 +98,32 @@ int main() {
     loaded = config.getSettings();
     require(loaded.logLevel.empty() && loaded.recordInputHistory &&
                 loaded.learnUserDictionary && loaded.englishCandidates &&
-                config.getFuzzyFlags() == 0,
+                config.getFuzzyFlags() == 0 &&
+                config.getEffectiveFuzzyFlags() == ((1 << 14) | 1),
             "Cleared/default settings and enabled switches must round-trip");
+
+    settings.fuzzyFlags = "None";
+    require(config.saveSettings(settings, &error),
+            error ? error->message : "Cannot disable fuzzy matching");
+    require(config.getSettings().fuzzyFlags == "None" &&
+                config.getEffectiveFuzzyFlags() == 0,
+            "Explicitly disabling all fuzzy rules must not restore defaults");
+    settings.fuzzyFlags = "None,C_CH";
+    require(!config.saveSettings(settings, &error) && error &&
+                config.getEffectiveFuzzyFlags() == 0,
+            "Disabling all rules cannot be combined with selected rules");
+    g_clear_error(&error);
+    settings.fuzzyFlags = "C_CH,AN_ANG,L_R";
+    require(config.saveSettings(settings, &error),
+            error ? error->message : "Cannot save multiple fuzzy options");
+    require(config.getEffectiveFuzzyFlags() ==
+                ((1 << 8) | (1 << 2) | (1 << 20)),
+            "Multiple fuzzy selections must combine their matching rules");
+    settings.fuzzyFlags.clear();
+    require(config.saveSettings(settings, &error),
+            error ? error->message : "Cannot restore recommended rules");
+    require(config.getEffectiveFuzzyFlags() == ((1 << 14) | 1),
+            "Recommended mode must restore built-in fuzzy rules");
 
     const char *external =
         "[general]\nrecordinputhistory=false\nlearnuserdictionary=false\n"

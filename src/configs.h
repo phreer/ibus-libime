@@ -34,6 +34,7 @@ public:
 
   // Get fuzzy flags as integer
   int getFuzzyFlags() const;
+  int getEffectiveFuzzyFlags() const;
   bool getEnglishCandidates() const { return englishCandidates_; }
   bool getRecordInputHistory() const { return recordInputHistory_; }
   bool getLearnUserDictionary() const { return learnUserDictionary_; }
