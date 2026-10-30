@@ -43,9 +43,14 @@ public:
   void toggleInputMode();
 
 private:
+  friend struct PinyinEngineTestAccess;
+
   IBusEngine *engine_;
   static std::shared_ptr<libime::PinyinIME>
       shared_ime_; // Shared across all instances
+  static bool user_data_dirty_; // True when unsaved changes exist
+  static guint save_timer_id_;  // GLib periodic save timer
+  static guint save_idle_id_;
   std::unique_ptr<libime::PinyinContext> context_;
   static std::unique_ptr<EnglishDictionary> english_dictionary_;
 
@@ -94,6 +99,7 @@ private:
   static void recordInputHistory(const std::string &pinyin,
                                  const std::string &text);
   static void saveUserData();
+  static gboolean onSaveTimer(gpointer data);
 };
 
 #endif // PINYIN_ENGINE_H

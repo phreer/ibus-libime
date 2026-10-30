@@ -7,6 +7,8 @@
 #include <libime/pinyin/pinyindictionary.h>
 #include <libime/pinyin/pinyinencoder.h>
 
+#include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -42,8 +44,11 @@ struct PinyinContextStatus {
 
 static std::map<std::string, PinyinContextStatus> context_status_map;
 
-// Initialize static member
+// Initialize static members
 std::shared_ptr<PinyinIME> PinyinEngine::shared_ime_ = nullptr;
+bool PinyinEngine::user_data_dirty_ = false;
+guint PinyinEngine::save_timer_id_ = 0;
+guint PinyinEngine::save_idle_id_ = 0;
 std::unique_ptr<EnglishDictionary> PinyinEngine::english_dictionary_;
 
 PinyinEngine::PinyinEngine(IBusEngine *engine)
@@ -164,9 +169,22 @@ void PinyinEngine::initializeSharedIME() {
   shared_ime_->setFuzzyFlags(flags);
   LOG_INFO("Shared IME configured: NBest={}, FuzzyFlags={}", nbest,
            fuzzyFlagsValue);
+
+  user_data_dirty_ = false;
+  // Start periodic auto-save timer (every 5 minutes)
+  save_timer_id_ = g_timeout_add_seconds(300, onSaveTimer, nullptr);
+  LOG_INFO("Auto-save timer started (interval: 300s)");
 }
 
 void PinyinEngine::cleanupSharedIME() {
+  if (save_timer_id_) {
+    g_source_remove(save_timer_id_);
+    save_timer_id_ = 0;
+  }
+  if (save_idle_id_) {
+    g_source_remove(save_idle_id_);
+    save_idle_id_ = 0;
+  }
   if (shared_ime_) {
     LOG_INFO("Saving user data before cleanup");
     saveUserData();
@@ -174,6 +192,22 @@ void PinyinEngine::cleanupSharedIME() {
     shared_ime_.reset();
     english_dictionary_.reset();
   }
+}
+
+gboolean PinyinEngine::onSaveTimer(gpointer) {
+  if (user_data_dirty_ && !save_idle_id_) {
+    // Handle pending input events before starting disk I/O.
+    save_idle_id_ = g_idle_add_full(
+        G_PRIORITY_LOW,
+        [](gpointer) -> gboolean {
+          save_idle_id_ = 0;
+          LOG_INFO("Auto-save triggered (idle)");
+          saveUserData();
+          return G_SOURCE_REMOVE;
+        },
+        nullptr, nullptr);
+  }
+  return G_SOURCE_CONTINUE; // reschedule timer
 }
 
 std::string PinyinEngine::getDataPath(const std::string &filename) {
@@ -222,50 +256,53 @@ void PinyinEngine::saveUserData() {
     return;
   }
 
-  std::string user_data_dir = getUserDataDir();
-  g_mkdir_with_parents(user_data_dir.c_str(), 0700);
-
-  // Save user dict (atomic write via temp file)
-  {
-    std::string dict_path = user_data_dir + "/user.dict";
-    std::string tmp_path = dict_path + ".tmp";
-    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
-    if (out.is_open()) {
-      try {
-        shared_ime_->dict()->save(PinyinDictionary::UserDict, out,
-                                   PinyinDictFormat::Binary);
-        out.flush();
-        out.close();
-        std::rename(tmp_path.c_str(), dict_path.c_str());
-        LOG_INFO("User dict saved to {}", dict_path);
-      } catch (const std::exception &e) {
-        LOG_ERROR("Failed to save user dict: {}", e.what());
-      }
-    } else {
-      LOG_ERROR("Failed to open user dict tmp file for writing: {}", tmp_path);
-    }
+  const std::string user_data_dir = getUserDataDir();
+  if (g_mkdir_with_parents(user_data_dir.c_str(), 0700) != 0) {
+    user_data_dirty_ = true;
+    LOG_ERROR("Failed to create user data directory {}: {}", user_data_dir,
+              g_strerror(errno));
+    return;
   }
 
-  // Save user history bigram (atomic write via temp file)
-  {
-    std::string history_path = user_data_dir + "/user.history";
-    std::string tmp_path = history_path + ".tmp";
-    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
-    if (out.is_open()) {
-      try {
-        shared_ime_->model()->save(out);
-        out.flush();
-        out.close();
-        std::rename(tmp_path.c_str(), history_path.c_str());
-        LOG_INFO("User history saved to {}", history_path);
-      } catch (const std::exception &e) {
-        LOG_ERROR("Failed to save user history: {}", e.what());
+  const auto save = [&user_data_dir](const char *filename,
+                                     const auto &serialize) {
+    const std::string path = user_data_dir + "/" + filename;
+    const std::string tmp_path = path + ".tmp";
+    try {
+      std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
+      if (!out.is_open()) {
+        LOG_ERROR("Failed to open user data tmp file for writing: {}", tmp_path);
+        return false;
       }
-    } else {
-      LOG_ERROR("Failed to open user history tmp file for writing: {}",
-                tmp_path);
+      serialize(out);
+      out.flush();
+      const bool written = out.good();
+      out.close();
+      if (!written || out.fail()) {
+        LOG_ERROR("Failed to write or close user data tmp file: {}", tmp_path);
+        return false;
+      }
+      if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
+        LOG_ERROR("Failed to replace user data file {}: {}", path,
+                  g_strerror(errno));
+        return false;
+      }
+      LOG_INFO("User data saved to {}", path);
+      return true;
+    } catch (const std::exception &e) {
+      LOG_ERROR("Failed to save user data file {}: {}", path, e.what());
+      return false;
     }
-  }
+  };
+
+  const bool dict_saved = save("user.dict", [](std::ostream &out) {
+    shared_ime_->dict()->save(PinyinDictionary::UserDict, out,
+                              PinyinDictFormat::Binary);
+  });
+  const bool history_saved = save("user.history", [](std::ostream &out) {
+    shared_ime_->model()->save(out);
+  });
+  user_data_dirty_ = !(dict_saved && history_saved);
 }
 
 void PinyinEngine::initializeIME() {
@@ -539,6 +576,7 @@ void PinyinEngine::selectCandidate(size_t index) {
         const std::string pinyin = context_->userInput();
         if (Config::getInstance().getLearnUserDictionary()) {
           context_->learn(); // must be called before context_->clear()
+          user_data_dirty_ = true;
           LOG_DEBUG("Learning completed");
         }
         if (Config::getInstance().getRecordInputHistory()) {

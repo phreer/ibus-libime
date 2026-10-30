@@ -1,7 +1,9 @@
 #include "ibus_engine.h"
 
 #include <glib.h>
+#include <glib-unix.h>
 
+#include <csignal>
 #include <iostream>
 
 #include "logger.h"
@@ -215,7 +217,26 @@ void IBusEngineWrapper::init() {
   }
 }
 
-void IBusEngineWrapper::run() { ibus_main(); }
+void IBusEngineWrapper::run() {
+  const auto quit = [](gpointer) -> gboolean {
+    ibus_quit();
+    return G_SOURCE_CONTINUE;
+  };
+  const guint sigint_source = g_unix_signal_add(SIGINT, quit, nullptr);
+  const guint sigterm_source = g_unix_signal_add(SIGTERM, quit, nullptr);
+
+  ibus_main();
+
+  g_source_remove(sigint_source);
+  g_source_remove(sigterm_source);
+  // Engine contexts must be destroyed before their shared IME.
+  if (factory_) {
+    ibus_object_destroy(IBUS_OBJECT(factory_));
+    g_clear_object(&factory_);
+  }
+  g_clear_object(&bus_);
+  PinyinEngine::cleanupSharedIME();
+}
 
 void IBusEngineWrapper::bus_disconnected_cb(IBusBus *bus, gpointer user_data) {
   ibus_quit();

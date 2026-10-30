@@ -3,13 +3,36 @@
 #include "configs.h"
 
 #include <glibmm.h>
+#include <libime/core/userlanguagemodel.h>
+#include <libime/pinyin/pinyindictionary.h>
 
 #include <algorithm>
+#include <csignal>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
+#include <utility>
+
+struct PinyinEngineTestAccess {
+  static bool dirty() { return PinyinEngine::user_data_dirty_; }
+  static guint timer() { return PinyinEngine::save_timer_id_; }
+  static guint idle() { return PinyinEngine::save_idle_id_; }
+  static void save() { PinyinEngine::saveUserData(); }
+  static void scheduleSave() { PinyinEngine::onSaveTimer(nullptr); }
+
+  static std::pair<std::string, std::string> snapshot() {
+    std::ostringstream dict;
+    std::ostringstream history;
+    PinyinEngine::shared_ime_->dict()->save(
+        libime::PinyinDictionary::UserDict, dict,
+        libime::PinyinDictFormat::Binary);
+    PinyinEngine::shared_ime_->model()->save(history);
+    return {dict.str(), history.str()};
+  }
+};
 
 namespace {
 void require(bool condition, const char *message) {
@@ -126,7 +149,7 @@ public:
   }
 
   ~Fixture() {
-    g_object_unref(ibusEngine);
+    destroyEngine();
     PinyinEngine::cleanupSharedIME();
     g_dbus_connection_flush_sync(connection, nullptr, nullptr);
     g_dbus_connection_remove_filter(connection, filter);
@@ -135,6 +158,11 @@ public:
     g_test_dbus_down(bus);
     g_object_unref(bus);
     std::filesystem::remove_all(directory);
+  }
+
+  void destroyEngine() {
+    g_clear_object(&ibusEngine);
+    engine = nullptr;
   }
 
   bool key(guint key, guint modifiers = 0) {
@@ -203,6 +231,158 @@ bool hasEnglish(const std::vector<std::string> &words) {
     });
   });
 }
+
+std::string readFile(const std::filesystem::path &path) {
+  require(!std::filesystem::is_symlink(path) &&
+              std::filesystem::is_regular_file(path),
+          "Saved data must remain a regular file");
+  std::ifstream in(path, std::ios::binary);
+  require(in.is_open(), "Cannot read saved data");
+  return std::string(std::istreambuf_iterator<char>(in), {});
+}
+
+void requireSavedData(
+    const Fixture &fixture,
+    const std::pair<std::string, std::string> &expected) {
+  const auto data = fixture.directory / "ibus-libime";
+  require(readFile(data / "user.dict") == expected.first,
+          "Saved dictionary must contain all in-memory learning");
+  require(readFile(data / "user.history") == expected.second,
+          "Saved history must contain all in-memory learning");
+}
+
+void runAutoSave() {
+  require(PinyinEngineTestAccess::dirty(),
+          "Failed or new learning data must remain dirty");
+  PinyinEngineTestAccess::scheduleSave();
+  const guint idle = PinyinEngineTestAccess::idle();
+  require(idle != 0, "Dirty data must schedule an idle save");
+  PinyinEngineTestAccess::scheduleSave();
+  require(PinyinEngineTestAccess::idle() == idle,
+          "Repeated timer callbacks must not queue duplicate saves");
+  while (PinyinEngineTestAccess::idle()) {
+    g_main_context_iteration(nullptr, TRUE);
+  }
+}
+
+void testPersistence(Fixture &fixture) {
+  namespace fs = std::filesystem;
+  fixture.focusIn("/org/freedesktop/IBus/InputContext/Persistence");
+  PinyinEngineTestAccess::save();
+  require(!PinyinEngineTestAccess::dirty(), "Initial save must succeed");
+  requireSavedData(fixture, PinyinEngineTestAccess::snapshot());
+
+  for (const char *filename : {"user.dict", "user.history"}) {
+    for (const std::string fault : {"write", "rename", "open"}) {
+      std::cout << "Testing " << filename << " " << fault << " failure\n";
+      const auto path = fixture.directory / "ibus-libime" / filename;
+      const fs::path tmp = path.string() + ".tmp";
+      const fs::path backup = path.string() + ".previous";
+      const std::string previous = readFile(path);
+      fixture.type("nihao");
+      fixture.key(' ');
+      const auto expected = PinyinEngineTestAccess::snapshot();
+
+      if (fault == "write") {
+        fs::create_symlink("/dev/full", tmp);
+      } else if (fault == "rename") {
+        fs::rename(path, backup);
+        fs::create_directory(path);
+      } else {
+        fs::create_directory(tmp);
+      }
+
+      runAutoSave();
+      require(PinyinEngineTestAccess::dirty(),
+              "Any failed save must retain the dirty flag");
+      if (fault == "rename") {
+        require(fs::is_directory(path),
+                "Failed rename must leave the target untouched");
+        require(readFile(backup) == previous,
+                "Previously saved data must remain intact");
+        fs::remove(path);
+        fs::rename(backup, path);
+      } else {
+        require(readFile(path) == previous,
+                "Failed write or open must not replace valid saved data");
+        fs::remove(tmp);
+      }
+
+      runAutoSave();
+      require(!PinyinEngineTestAccess::dirty(),
+              "Retry must succeed without another learning operation");
+      requireSavedData(fixture, expected);
+      require(!fs::exists(tmp), "Successful retry must consume the temp file");
+    }
+  }
+
+  fixture.type("nihao");
+  fixture.key(' ');
+  const auto expected = PinyinEngineTestAccess::snapshot();
+  const auto data = fixture.directory / "ibus-libime";
+  const auto backup = fixture.directory / "saved-user-data";
+  fs::rename(data, backup);
+  {
+    std::ofstream blocker(data);
+    blocker << "not a directory";
+    require(blocker.good(), "Cannot create directory failure fixture");
+  }
+  runAutoSave();
+  require(PinyinEngineTestAccess::dirty(),
+          "Directory creation failure must retain the dirty flag");
+  fs::remove(data);
+  fs::rename(backup, data);
+  runAutoSave();
+  require(!PinyinEngineTestAccess::dirty(),
+          "Save must retry after the directory becomes available");
+  requireSavedData(fixture, expected);
+  PinyinEngineTestAccess::scheduleSave();
+  require(PinyinEngineTestAccess::idle() == 0,
+          "Clean data must not schedule an automatic save");
+}
+
+void testShutdown(Fixture &fixture, const std::string &mode) {
+  fixture.focusIn("/org/freedesktop/IBus/InputContext/Shutdown");
+  fixture.type("nihao");
+  fixture.key(' ');
+  require(PinyinEngineTestAccess::dirty(), "Chinese selection must be learned");
+  const auto expected = PinyinEngineTestAccess::snapshot();
+  require(!std::filesystem::exists(fixture.directory / "ibus-libime" /
+                                   "user.dict"),
+          "Shutdown test must run before the first automatic save");
+  PinyinEngineTestAccess::scheduleSave();
+  const guint timer = PinyinEngineTestAccess::timer();
+  const guint idle = PinyinEngineTestAccess::idle();
+  require(timer != 0 && idle != 0, "Shutdown must have pending save sources");
+  fixture.destroyEngine();
+
+  const int signal = mode == "shutdown-sigint"    ? SIGINT
+                     : mode == "shutdown-sigterm" ? SIGTERM
+                                                 : 0;
+  g_idle_add(
+      [](gpointer data) -> gboolean {
+        const int signal = GPOINTER_TO_INT(data);
+        if (signal) {
+          if (std::raise(signal) != 0) {
+            g_error("Cannot raise test shutdown signal");
+          }
+        } else {
+          ibus_quit();
+        }
+        return G_SOURCE_REMOVE;
+      },
+      GINT_TO_POINTER(signal));
+  IBusEngineWrapper::run();
+
+  requireSavedData(fixture, expected);
+  require(!PinyinEngineTestAccess::dirty(),
+          "Orderly shutdown must complete the final save");
+  require(PinyinEngineTestAccess::timer() == 0 &&
+              PinyinEngineTestAccess::idle() == 0 &&
+              !g_main_context_find_source_by_id(nullptr, timer) &&
+              !g_main_context_find_source_by_id(nullptr, idle),
+          "Shutdown must remove both periodic and queued idle saves");
+}
 } // namespace
 
 int main(int argc, char **argv) {
@@ -214,6 +394,15 @@ int main(int argc, char **argv) {
         G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING));
     Fixture fixture(argv[1], argv[2]);
     const std::string mode = argv[2];
+    if (mode == "persistence" || mode.starts_with("shutdown-")) {
+      if (mode == "persistence") {
+        testPersistence(fixture);
+      } else {
+        testShutdown(fixture, mode);
+      }
+      std::cout << mode << " tests passed\n";
+      return 0;
+    }
     if (mode == "enabled") {
       require(Config::getInstance().getRecordInputHistory(),
               "Input history recording must be enabled by default");

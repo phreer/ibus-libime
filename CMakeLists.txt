@@ -89,4 +89,9 @@ if(BUILD_TESTING)
         add_test(NAME pinyin-english-${mode} COMMAND test-pinyin-english
             ${CMAKE_CURRENT_SOURCE_DIR}/data ${mode})
     endforeach()
+    foreach(mode persistence shutdown-normal shutdown-sigint shutdown-sigterm)
+        add_test(NAME pinyin-${mode} COMMAND test-pinyin-english
+            ${CMAKE_CURRENT_SOURCE_DIR}/data ${mode})
+        set_tests_properties(pinyin-${mode} PROPERTIES TIMEOUT 30)
+    endforeach()
 endif()
