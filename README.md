@@ -1,8 +1,19 @@
-# IBus LibIME
+# IBus libIME
 
-一个基于 [LibIME](https://github.com/fcitx/libime) 的现代化 IBus 中文拼音输入法前端。
+一个基于 [libIME](https://github.com/fcitx/libime) 的现代化 IBus 中文拼音输入法前端。
 
-## 编译安装
+libIME 是 fcitx 的默认 Pinyin 输入法的引擎库，有着相当不错的性能和准确度。现在不需要切换输入法框架，IBus 用户也可以享受到同样的输入体验。
+
+## 安装
+
+### Fedora
+
+Release 页面提供了 Fedora 的 RPM 包，可直接下载安装。
+
+```bash
+wget https://github.com/phreer/ibus-libime/releases/download/0.1.2/ibus-libime-0.1.2-1.fc44.x86_64.rpm
+sudo dnf install -y ibus-libime-0.1.2-1.fc44.x86_64.rpm
+```
 
 ### 从源码编译
 
@@ -24,16 +35,6 @@ make -j$(nproc)
 sudo make install
 ```
 
-### RPM 打包（Fedora/RHEL）
-
-```bash
-# 使用 tito 构建
-tito build --rpm
-
-# 或手动构建
-rpmbuild -ba ibus-libime.spec
-```
-
 ## 使用说明
 
 ### 启用输入法
@@ -43,7 +44,7 @@ rpmbuild -ba ibus-libime.spec
 ibus restart
 ```
 
-2. 在 IBus 设置中添加 "LibIME Pinyin" 输入法
+2. 在 IBus 设置中添加 "LibIME Pinyin" 输入法。对于 GNOME 环境，打开“设置”，进入“键盘“添加输入源，选择“LibIME Pinyin”。
 
 3. 切换到该输入法开始使用
 
