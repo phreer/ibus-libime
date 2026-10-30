@@ -1,0 +1,38 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: ibus-libime
+Source: https://github.com/phreer/ibus-libime
+
+Files: *
+Copyright: 2026 Weifeng Liu
+License: GPL-3
+
+Files: data/english-frequency.txt
+Copyright: Hermit Dave and FrequencyWords contributors
+License: CC-BY-SA-4.0
+Comment: Unmodified FrequencyWords content/2018/en/en_50k.txt from revision
+ 525f9b560de45753a5ea01069454e72e9aa541c6, based on OpenSubtitles2018.
+ See /usr/share/ibus-libime/english-README.txt for full attribution and
+ /usr/share/ibus-libime/english-LICENSE.txt for the full license text.
+
+Files: data/english-LICENSE.txt
+Copyright: Creative Commons Corporation
+License: CC-BY-SA-4.0
+
+License: GPL-3
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License version 3.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ .
+ On Debian systems, the complete license text is available at
+ /usr/share/common-licenses/GPL-3.
+
+License: CC-BY-SA-4.0
+ This data is distributed under the Creative Commons
+ Attribution-ShareAlike 4.0 International license.
+ .
+ The full license text is included in
+ /usr/share/ibus-libime/english-LICENSE.txt.
+ See also https://creativecommons.org/licenses/by-sa/4.0/.

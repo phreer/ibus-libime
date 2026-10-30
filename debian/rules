@@ -1,0 +1,8 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	test "$$(dpkg-parsechangelog --show-field Version | sed 's/-[^-]*$$//')" = "$$(cat VERSION)"
+	dh_auto_configure -- -DCMAKE_INSTALL_LIBEXECDIR=libexec -DBUILD_TESTING=ON

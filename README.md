@@ -15,6 +15,24 @@ wget https://github.com/phreer/ibus-libime/releases/download/0.1.2/ibus-libime-0
 sudo dnf install -y ibus-libime-0.1.2-1.fc44.x86_64.rpm
 ```
 
+### Debian / Ubuntu 软件包
+
+提供 Ubuntu 24.04、Ubuntu 26.04 和 Debian 13 的 amd64 deb 构建。
+从 Release 下载与当前发行版对应的 `ibus-libime_..._amd64.deb`
+主包（无需安装 `-dbgsym` 调试包），使用 APT 安装依赖：
+
+```bash
+# Ubuntu 24.04 示例，替换为实际下载的文件名
+sudo apt install ./ibus-libime_0.1.2-1+ubuntu24.04_amd64.deb
+ibus restart
+```
+
+请将文件名替换为实际下载的包，例如
+`ibus-libime_0.1.2-1+ubuntu24.04_amd64.deb`；不同发行版的包不可混用。
+安装后在 IBus 设置中添加 **LibIME Pinyin**。
+本地 deb 构建、RPM 打包、CI 和发布流程见
+[开发文档](docs/development.md)。
+
 ### 从源码编译
 
 构建依赖包括 GTK 3 开发包（Fedora：`gtk3-devel`，Debian/Ubuntu：

@@ -554,11 +554,13 @@ void PinyinEngine::selectCandidate(size_t index) {
       return;
     }
 
-    const bool raw = candidates[index].type == Candidate::Type::Raw;
-    if (raw) {
-      context_->selectCustom(context_->size() - context_->selectedLength(),
-                             candidate_text);
-    } else if (candidates[index].prefix_end != 0) {
+    if (candidates[index].type == Candidate::Type::Raw) {
+      commitString(context_->selectedSentence() + candidate_text);
+      reset();
+      return;
+    }
+
+    if (candidates[index].prefix_end != 0) {
       const size_t cursor = context_->cursor();
       context_->setCursor(candidates[index].prefix_end);
       const auto &prefixCandidates = context_->candidatesToCursor();
@@ -582,16 +584,14 @@ void PinyinEngine::selectCandidate(size_t index) {
     if (context_->selected()) {
       std::string sentence = context_->sentence();
       LOG_INFO("Committing sentence: {}", sentence);
-      if (!raw) {
-        const std::string pinyin = context_->userInput();
-        if (Config::getInstance().getLearnUserDictionary()) {
-          context_->learn(); // must be called before context_->clear()
-          user_data_dirty_ = true;
-          LOG_DEBUG("Learning completed");
-        }
-        if (Config::getInstance().getRecordInputHistory()) {
-          recordInputHistory(pinyin, sentence);
-        }
+      const std::string pinyin = context_->userInput();
+      if (Config::getInstance().getLearnUserDictionary()) {
+        context_->learn(); // must be called before context_->clear()
+        user_data_dirty_ = true;
+        LOG_DEBUG("Learning completed");
+      }
+      if (Config::getInstance().getRecordInputHistory()) {
+        recordInputHistory(pinyin, sentence);
       }
       commitString(sentence);
       reset();

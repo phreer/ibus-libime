@@ -1,0 +1,100 @@
+name: Debian packages
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            distribution: ubuntu24.04
+          - image: ubuntu:26.04
+            distribution: ubuntu26.04
+          - image: debian:13
+            distribution: debian13
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DEB_BUILD_OPTIONS: parallel=2
+    steps:
+      - name: Install packaging tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git dpkg-dev devscripts lintian
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: apt-get build-dep -y --no-install-recommends .
+      - name: Test release artifact selection
+        run: bash tests/test_release.sh
+      - name: Build and test
+        run: ./scripts/build-deb.sh
+      - name: Check packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(cat VERSION)
+          dir="deb-out/$version/${{ matrix.distribution }}"
+          lintian --fail-on error "$dir"/*.changes
+          ./scripts/check-deb.sh "$dir"/ibus-libime_"$version"-*+${{ matrix.distribution }}_amd64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.distribution }}-amd64
+          path: deb-out/
+          if-no-files-found: error
+
+  install:
+    needs: build
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            distribution: ubuntu24.04
+          - image: ubuntu:26.04
+            distribution: ubuntu26.04
+          - image: debian:13
+            distribution: debian13
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb-${{ matrix.distribution }}-amd64
+          path: deb-out/
+      - name: Install in a clean environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          packages=(deb-out/*/${{ matrix.distribution }}/ibus-libime_*_amd64.deb)
+          test "${#packages[@]}" -eq 1
+          apt-get install -y --no-install-recommends "./${packages[0]}"
+          for program in /usr/libexec/ibus-engine-libime /usr/libexec/ibus-setup-libime; do
+            test -x "$program"
+            libraries=$(ldd "$program")
+            echo "$libraries"
+            if grep -q 'not found' <<< "$libraries"; then
+              exit 1
+            fi
+          done
+          grep -Fx '    <exec>/usr/libexec/ibus-engine-libime</exec>' /usr/share/ibus/component/libime.xml
+          grep -Fx '            <setup>/usr/libexec/ibus-setup-libime</setup>' /usr/share/ibus/component/libime.xml
+          grep -Fx 'Exec=/usr/libexec/ibus-setup-libime' /usr/share/applications/ibus-setup-libime.desktop
+          test -s /usr/share/libime/sc.dict
+          test -s /usr/lib/x86_64-linux-gnu/libime/zh_CN.lm
+          test -s /usr/share/ibus-libime/english-frequency.txt
+          test -s /usr/share/ibus-libime/english-technical.txt
+          test -s /usr/share/ibus-libime/english-README.txt
+          test -s /usr/share/ibus-libime/english-LICENSE.txt

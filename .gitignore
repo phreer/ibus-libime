@@ -7,3 +7,16 @@ compile_commands.json
 /.cache/
 *.rpm
 *.tar.gz
+/deb-out/
+/obj-*/
+/debian/.debhelper/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/ibus-libime/
+/debian/ibus-libime-dbgsym/
+/debian/*.debhelper
+/debian/*.substvars
+*.deb
+*.ddeb
+*.changes
+*.buildinfo

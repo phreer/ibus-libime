@@ -703,6 +703,13 @@ int main(int argc, char **argv) {
       fixture.key('t');
       require(fixture.candidates() == std::vector<std::string>{"it"},
               "Editing the remainder must preserve its raw candidate");
+      const auto beforeRawSelection = PinyinEngineTestAccess::snapshot();
+      const bool dirtyBeforeRawSelection = PinyinEngineTestAccess::dirty();
+      const auto historyPath =
+          fixture.directory / "ibus-libime" / "input-history.tsv";
+      const bool hadHistory = std::filesystem::exists(historyPath);
+      const std::string historyBeforeRawSelection =
+          hadHistory ? readFile(historyPath) : std::string{};
       if (std::string(selection) == "space") {
         fixture.key(' ');
       } else if (std::string(selection) == "number") {
@@ -715,6 +722,13 @@ int main(int argc, char **argv) {
           "Selecting the raw remainder must commit selected Chinese and it");
       require(fixture.candidates().empty(),
               "Completing the remainder must clear the lookup table");
+      require(PinyinEngineTestAccess::snapshot() == beforeRawSelection &&
+                  PinyinEngineTestAccess::dirty() == dirtyBeforeRawSelection,
+              "Raw remainder selection must not learn dictionary or model data");
+      require(std::filesystem::exists(historyPath) == hadHistory &&
+                  (!hadHistory ||
+                   readFile(historyPath) == historyBeforeRawSelection),
+              "Raw remainder selection must not record input history");
     }
 
     fixture.type("android");
