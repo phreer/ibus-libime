@@ -26,33 +26,37 @@ public:
 
     nbest_ = gtk_spin_button_new_with_range(1, INT_MAX, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(nbest_), settings.nbest);
-    addRow(grid, 0, "候选词数量", nbest_);
+    addRow(grid, 0, "候选词数量", nbest_,
+           "生成的候选词数量，影响选词准确度。默认：3。\n"
+           "保存后从下一次输入开始生效，不打断当前输入。");
     pageSize_ = gtk_spin_button_new_with_range(1, 16, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(pageSize_), settings.pageSize);
-    addRow(grid, 1, "每页候选词数量", pageSize_);
+    addRow(grid, 1, "每页候选词数量", pageSize_,
+           "候选窗口每页显示的词条数量，范围：1–16。默认：9。\n"
+           "保存后从下一次输入开始生效，不打断当前输入。");
     fuzzyFlags_ = gtk_entry_new();
     gtk_entry_set_text(GTK_ENTRY(fuzzyFlags_), settings.fuzzyFlags.c_str());
     gtk_entry_set_placeholder_text(GTK_ENTRY(fuzzyFlags_), "Inner,CommonTypo");
-    gtk_widget_set_tooltip_text(
-        fuzzyFlags_,
-        "逗号分隔的标志名称；留空使用内置规则。\n"
-        "CommonTypo, V_U, AN_ANG, EN_ENG, IAN_IANG, IN_ING,\n"
-        "U_OU, UAN_UANG, C_CH, F_H, L_N, S_SH, Z_ZH, VE_UE,\n"
-        "Inner, InnerShort, PartialFinal, PartialSp, AdvancedTypo,\n"
-        "Correction, L_R");
-    addRow(grid, 2, "模糊音标志", fuzzyFlags_);
+    addRow(grid, 2, "模糊音标志", fuzzyFlags_,
+           "逗号分隔的标志名称；留空使用内置规则。\n"
+           "保存后从下一次输入开始生效，不打断当前输入。\n"
+           "CommonTypo, V_U, AN_ANG, EN_ENG, IAN_IANG, IN_ING,\n"
+           "U_OU, UAN_UANG, C_CH, F_H, L_N, S_SH, Z_ZH, VE_UE,\n"
+           "Inner, InnerShort, PartialFinal, PartialSp, AdvancedTypo,\n"
+           "Correction, L_R");
 
-    history_ = addCheck(box, "记录中文输入历史", settings.recordInputHistory);
+    history_ =
+        addCheck(box, "记录中文输入历史", settings.recordInputHistory,
+                 "将确认提交的中文拼音和文本追加到本机 input-history.tsv。\n"
+                 "保存后直接生效；关闭后停止追加，不删除已有记录。");
     learning_ =
-        addCheck(box, "学习用户词库和候选排序", settings.learnUserDictionary);
+        addCheck(box, "学习用户词库和候选排序", settings.learnUserDictionary,
+                 "通过已选择的中文候选学习用户词库并调整候选排序。\n"
+                 "保存后直接生效；关闭后停止新增学习，仍使用已有用户数据。");
     english_ = addCheck(box, "中文模式英文补全（重启生效）",
-                        settings.englishCandidates);
-    auto *privacy =
-        gtk_label_new("关闭历史记录不会删除已有记录。\n"
-                      "关闭学习后，仍会使用已有用户词库和排序数据。");
-    gtk_label_set_xalign(GTK_LABEL(privacy), 0);
-    gtk_label_set_line_wrap(GTK_LABEL(privacy), TRUE);
-    gtk_box_pack_start(GTK_BOX(box), privacy, FALSE, FALSE, 0);
+                        settings.englishCandidates,
+                        "在中文模式下提供英文单词前缀补全候选。\n"
+                        "修改后需重启输入法才能生效。");
 
     auto *logRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
     auto *logLabel = gtk_label_new("日志级别（重启生效）");
@@ -72,8 +76,11 @@ public:
     }
     gtk_combo_box_set_active_id(GTK_COMBO_BOX(logLevel_),
                                 settings.logLevel.c_str());
-    gtk_widget_set_tooltip_text(logLevel_,
-                                "IBUS_LIBIME_LOG_LEVEL 环境变量优先于此配置。");
+    const char *logHint = "控制日志详细程度：DEBUG、INFO、WARN、ERROR。\n"
+                          "修改后需重启输入法才能生效。\n"
+                          "IBUS_LIBIME_LOG_LEVEL 环境变量优先于此配置。";
+    gtk_widget_set_tooltip_text(logLevel_, logHint);
+    gtk_widget_set_tooltip_text(logLabel, logHint);
     gtk_box_pack_start(GTK_BOX(logRow), logLevel_, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(box), logRow, FALSE, FALSE, 0);
 
@@ -83,8 +90,7 @@ public:
     gtk_label_set_xalign(GTK_LABEL(path), 0);
     gtk_box_pack_start(GTK_BOX(box), path, FALSE, FALSE, 0);
     status_ =
-        gtk_label_new("历史和学习开关保存后直接生效；候选数量、分页和模糊音\n"
-                      "从下一次输入开始生效，不打断当前输入。");
+        gtk_label_new("将鼠标停留在选项上可查看说明；点击“保存”应用修改。");
     gtk_label_set_xalign(GTK_LABEL(status_), 0);
     gtk_label_set_line_wrap(GTK_LABEL(status_), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status_, FALSE, FALSE, 0);
@@ -114,19 +120,23 @@ public:
 
 private:
   static void addRow(GtkWidget *grid, int row, const char *text,
-                     GtkWidget *widget) {
+                     GtkWidget *widget, const char *hint) {
     auto *label = gtk_label_new(text);
     gtk_label_set_xalign(GTK_LABEL(label), 0);
     gtk_label_set_mnemonic_widget(GTK_LABEL(label), widget);
     atk_object_set_name(gtk_widget_get_accessible(widget), text);
+    gtk_widget_set_tooltip_text(label, hint);
+    gtk_widget_set_tooltip_text(widget, hint);
     gtk_widget_set_hexpand(widget, TRUE);
     gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), widget, 1, row, 1, 1);
   }
 
-  static GtkWidget *addCheck(GtkWidget *box, const char *label, bool active) {
+  static GtkWidget *addCheck(GtkWidget *box, const char *label, bool active,
+                             const char *hint) {
     auto *check = gtk_check_button_new_with_label(label);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(check), active);
+    gtk_widget_set_tooltip_text(check, hint);
     gtk_box_pack_start(GTK_BOX(box), check, FALSE, FALSE, 0);
     return check;
   }
@@ -166,8 +176,7 @@ private:
       return;
     }
     gtk_label_set_text(GTK_LABEL(status_),
-                       "设置已保存。当前输入不受影响。\n"
-                       "英文补全和日志级别修改需重启输入法后生效。");
+                       "设置已保存。各选项的生效时机请查看选项提示。");
   }
 
   GtkWidget *window_;

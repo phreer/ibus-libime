@@ -87,7 +87,8 @@ ibus restart
 `ibus-setup-libime`（通常为 `/usr/libexec/ibus-setup-libime`）。
 
 GTK 3 设置窗口包含候选数量、每页候选数量、模糊音、英文补全、输入历史、
-词库学习和日志级别。点击“保存”写入当前用户的
+词库学习和日志级别。将鼠标停留在选项或其标签上，可查看用途、注意事项和生效时机。
+点击“保存”写入当前用户的
 `$XDG_CONFIG_HOME/ibus-libime.ini`（默认 `~/.config/ibus-libime.ini`），
 保留其他配置项和注释；关闭窗口不会保存未提交的修改。
 
